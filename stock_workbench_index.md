@@ -1,0 +1,118 @@
+# 股票小工坊索引
+
+> 不做自动交易。只做持仓修复、分批止盈、风险线记录、资金池管理。
+
+---
+
+## 当前样板卡
+
+| 标的 | 版本 | 原始数据 | 状态 |
+|------|------|---------|------|
+| 阳光电源 300274 | [sungrow_position_card_v0.1.1.md](sungrow_test/sungrow_position_card_v0.1.1.md) | [data_300274.json](sungrow_test/data_300274.json) | 长线看好 + 高波动趋势票；06-09 更新：盘中下探 144.57 后收回，收盘 152.5，重新回到 150 上方；150 收回是低位止跌尝试信号，但 153—155 仍未突破，量比 0.89，修复力度仍需继续验证 |
+| 阳光电源 短线规则 | [sungrow_short_term_rules_v0.1.md](sungrow_test/sungrow_short_term_rules_v0.1.md) | — | 机动仓管理：三手拆分、卖出/买回触发、禁忌清单 |
+| 阳光电源 复盘记录 | [sungrow_review_2026-06-01.md](sungrow_test/sungrow_review_2026-06-01.md) | — | 高开反抽失败后破位整理，策略从冲 197 止盈切换为反抽处理机动仓 |
+| 阳光电源 复盘记录 | [sungrow_review_2026-06-02.md](sungrow_test/sungrow_review_2026-06-02.md) | — | 缩量弱势整理，恐慌减弱但修复未成立 |
+| 阳光电源 复盘记录 | [sungrow_review_2026-06-03.md](sungrow_test/sungrow_review_2026-06-03.md) | — | 低位整理偏弱，弱势区间继续下移至 166—170 |
+| 阳光电源 复盘记录 | [sungrow_review_2026-06-04.md](sungrow_test/sungrow_review_2026-06-04.md) | — | 破位后继续下探至 163，低位观察区下移至 160—163 |
+| 阳光电源 复盘记录 | [sungrow_review_2026-06-05.md](sungrow_test/sungrow_review_2026-06-05.md) | — | 连续破位后加速下探至 153 附近，原 160—163 低位区被跌破，弱势仍在延续 |
+| 阳光电源 复盘记录 | [sungrow_review_2026-06-08.md](sungrow/reviews/sungrow_review_2026-06-08.md) | — | 150 整数关口失守，收于 146.8，145—150 成为新低位观察区，153—155 转为短线反压区 |
+| 阳光电源 复盘记录 | [sungrow_review_2026-06-09.md](sungrow/reviews/sungrow_review_2026-06-09.md) | — | 盘中下探 144.57 后收回，收盘 152.5，重新回到 150 上方，153—155 仍为反压区，量比 0.89 修复力度仍需验证 |
+| 阳光电源 风险与跟踪 | [sungrow_risk_and_tracking_v0.1.md](sungrow_test/sungrow_risk_and_tracking_v0.1.md) | — | Top 5 风险、证伪条件、机动仓触发、跟踪指标 |
+| 阳光电源 估值与安全边际 | [sungrow_valuation_v0.1.md](sungrow_test/sungrow_valuation_v0.1.md) | — | PE/PB/PS 估算、三情景估值、安全边际判断、待补数据清单 |
+| 阳光电源 同业对比 | [sungrow_peer_comparison_v0.1.md](sungrow_test/sungrow_peer_comparison_v0.1.md) | — | 可比公司框架（固德威/德业/锦浪/科华/上能/华为数字能源）、比较维度、待补数据清单 |
+| 阳光电源 行业与竞争格局 | [sungrow_industry_competition_v0.1.md](sungrow_test/sungrow_industry_competition_v0.1.md) | — | 储能/逆变器行业、海外订单、AIDC 新业务、新旧催化分类、竞争格局 |
+| 阳光电源 低位观察与补仓条件 | [sungrow_low_zone_observation_v0.1.md](sungrow_test/sungrow_low_zone_observation_v0.1.md) | — | 06-08 更新：153—155 转为反压区，150 转为第一修复位/反压，145—150 为当前低位观察区，140—145 为下一风险区，138.61 为心理锚 |
+| 阳光电源 阶段总结 | [sungrow_phase_summary_2026-06-01_to_2026-06-05.md](sungrow_test/sungrow_phase_summary_2026-06-01_to_2026-06-05.md) | — | 06-01 至 06-05 连续破位走势回顾、消息面/资金面总结、阶段学习与当前策略 |
+
+---
+
+## 后续待处理清单
+
+| 标的 | 身份分类 | 状态 |
+|------|---------|------|
+| 西藏矿业 | 资源周期 / 盐湖提锂旧坑 | 已完成 v0.1：[xizang_mining_position_card_v0.1.md](xizang_mining_test/xizang_mining_position_card_v0.1.md)，待补持仓成本/手数/浮亏 |
+| 合盛硅业 | 周期股 / 重点疑难票 | 待建卡 |
+| 白酒基金 | 行业基金 / 长期亏损 | 待建卡 |
+| 黄金配置备选 | 防守资产 / 资金池配置候选 | 待评估 |
+| 其他亏损票 | 暂未录入 | 前三个典型完成初筛后分批加入 |
+
+---
+
+## 工具仓库审查记录
+
+- stock-analysis：已用于阳光电源、西藏矿业 Phase 1 数据采集与持仓修复卡生成
+- daily_stock_analysis：已完成只读可用性评估，定位为每日多股巡检 / 新闻异动 / 技术摘要 / 推送提醒候选工具
+  - 审查记录：[daily_stock_analysis_review_2026-06-01.md](repo_screening/daily_stock_analysis_review_2026-06-01.md)
+- Vibe-Trading：已完成只读可用性评估，定位为只读参考 + 可选择性试跑数据模块；仅学习 A 股数据源、技术指标、Research Goal / Evidence / Hypothesis 结构，不启用 broker connector，不配置券商权限，不做任何交易操作
+  - 审查记录：[vibe_trading_review_2026-06-04.md](repo_screening/vibe_trading_review_2026-06-04.md)
+- TradingAgents-Telegram：已完成只读可用性评估，定位为只读参考；不适合直接用于 A 股分析，但可学习 Telegram 看盘入口、watchlist / digest / history / 缓存、Telegraph 报告格式和多智能体报告结构
+  - 审查记录：[tradingagents_telegram_review_2026-06-04.md](repo_screening/tradingagents_telegram_review_2026-06-04.md)
+- opennews-mcp：已完成只读可用性评估，结论为暂不建议引入；核心偏加密市场，A股覆盖不足，AI评级与 Trading Signal 风险较高。外围宏观消息继续使用 Perplexity 交叉验证即可
+  - 审查记录：[opennews_mcp_review_2026-06-04.md](repo_screening/opennews_mcp_review_2026-06-04.md)
+- cinar/indicator：已完成只读可用性评估，定位为只读参考 + 可离线试跑指标计算；可学习 MA/EMA、MACD、RSI、KDJ、Bollinger、ATR、OBV/MFI/CMF 等技术指标逻辑，用于补强小工坊的反抽质量判断、买回条件验证和简单回测参考。不引入自动交易，不生成实盘买卖信号
+  - 审查记录：[indicator_review_2026-06-04.md](repo_screening/indicator_review_2026-06-04.md)
+- 盘前消息自动化候选筛选：已完成候选仓库初筛；当前推荐路线为先用 daily_stock_analysis 跑通 0 成本盘前摘要，再按 Horizon → DailyBrief → feedgrab 顺序做只读审查，后续再考虑 crawl4ai / Scrapling 等公告抓取底层工具
+  - 筛选记录：[news_automation_candidates_2026-06-04.md](repo_screening/news_automation_candidates_2026-06-04.md)
+- Horizon：已完成只读可用性评估，定位为盘前消息自动化核心候选；可用于财经 RSS 聚合、新闻去重、中文摘要、定时简报和外围消息整理。后续若试跑，需先验证财经 RSS 源可用性，不使用 AI 评分生成买卖判断
+  - 审查记录：[horizon_review_2026-06-04.md](repo_screening/horizon_review_2026-06-04.md)
+- DailyBrief：已完成只读可用性评估，定位为只读参考；可参考 GitHub Actions 定时简报、21 个外围 ticker 技术分析结构和 HTML 单文件报告格式。由于无 A 股个股、无 A 股公告/行业新闻、无 Telegram/邮件/Webhook 推送，且 TypeScript 栈与小工坊不直接兼容，不作为盘前消息自动化核心工具；Horizon 更适合作为主候选
+  - 审查记录：[dailybrief_review_2026-06-04.md](repo_screening/dailybrief_review_2026-06-04.md)
+- feedgrab：已完成只读可用性评估，定位为 Horizon 的信息源补充层；可用于 RSS 抓取、微信财经公众号抓取、付费墙财经媒体与社媒线索采集，统一输出 Markdown + YAML。缺少 AI 摘要、推送和定时能力，不作为盘前消息自动化主工具；后续若试跑，仅限只读信息源采集，不生成买卖建议
+  - 审查记录：[feedgrab_review_2026-06-04.md](repo_screening/feedgrab_review_2026-06-04.md)
+- 盘前消息自动化路线：已完成 v0.1 路线图；推荐 daily_stock_analysis 先跑 0 成本盘前摘要，Horizon 作为主工具候选，feedgrab 作为信息源补充层，DailyBrief 只读参考，opennews-mcp 排除；所有重大消息继续通过 Perplexity 做外部交叉验证
+  - 路线记录：[pre_market_news_automation_route_v0.1.md](repo_screening/pre_market_news_automation_route_v0.1.md)
+- serenity-skill：已完成只读可用性评估，定位为只读参考 + 可借鉴方法论；适合用于产业链拆解、供应链瓶颈识别、证据链强化、候选股/基金方向优先级排序，以及"周日下周观察计划"。不安装为 Agent Skill，不运行本地评分脚本，不生成交易方向
+  - 审查记录：[serenity_skill_review_2026-06-07.md](repo_screening/serenity_skill_review_2026-06-07.md)
+- AKShare 最小试跑｜2026-06-09 数据校验：标的 300274，对比基准同花顺人工数据，开盘、最高、最低、收盘、涨跌幅、成交额、换手率全部通过；量比 AKShare 日线无此字段，暂由同花顺人工补充。结论：AKShare 进入自动行情源候选，但同花顺人工数据仍为行情基准
+  - 记录文件：[market_data_source_rules_v0.1.md](rules/market_data_source_rules_v0.1.md)
+  - 工具：[akshare_daily_quote_check_v0.1.py](tools/akshare_daily_quote_check_v0.1.py)
+  - 环境备注：本次安装 akshare 时触发 PEP 668，后续建议为 stocks 小工坊建立独立 Python 虚拟环境
+
+---
+
+## 工作原则
+
+1. **先定身份再动手。** 每只票必须先明确分类：长线看好 / 周期资源 / 陈年烂股 / 小炒作 / 防守资产
+2. **每只票必须有完整档案：** 成本、持仓手数、核心逻辑、卖点计划、风险线、是否保留底仓
+3. **不做自动买卖。** 所有操作先写计划，再看盘执行
+4. **不因为亏损太久就逃避。** 烂股也要有处理方案，不能放在那里假装看不见
+5. **不因为刚回本就幻想大牛。** 回本是止盈信号之一，不是加仓理由
+6. **先写计划再看盘。** 看到价格跳动之前，决策应该已经做好了
+
+---
+
+## 小工坊规则与方法论
+
+- [stock_deep_research_framework_v0.1.md](rules/stock_deep_research_framework_v0.1.md) — A股个股深度研究方法论
+- [portfolio_position_discipline_v0.1.md](rules/portfolio_position_discipline_v0.1.md) — 账户仓位纪律
+- [technical_rules_v0.1.md](rules/technical_rules_v0.1.md) — 技术指标规则
+- [industry_chain_analysis_v0.1.md](rules/industry_chain_analysis_v0.1.md) — 产业链分析规则
+- [weekly_market_watch_template_v0.1.md](weekly/weekly_market_watch_template_v0.1.md) — 周日下周观察计划模板
+- [weekly_market_watch_2026-06-08.md](weekly/weekly_market_watch_2026-06-08.md) — 周日下周观察计划｜2026-06-08
+- [market_data_source_rules_v0.1.md](rules/market_data_source_rules_v0.1.md) — 行情数据源规则
+
+> **数据源口径：** 行情数字以同花顺人工录入 / 后续指定行情源为准；Perplexity 只用于公告、新闻、行业和资金面交叉验证，不再作为开高低收、成交额、量比、换手率等行情数字来源。
+>
+> 2026-06-09 已完成 AKShare 最小试跑，300274 日线数据与同花顺人工口径一致；后续每日复盘可优先用 AKShare 取开高低收、涨跌幅、成交额、换手率，量比仍由同花顺人工补充。当前仍以同花顺为基准，AKShare 进入自动行情源候选。
+
+---
+
+## 小工坊本地编辑规则
+
+当 Claude Code 新建或修改股票小工坊内的 Markdown 文件后，需要在完成写入后，用真正的 Visual Studio Code 静默打开该文件，方便人工检查。
+
+要求：
+
+- 使用真实 VSCode，不使用 Cursor。
+- 不依赖系统默认打开程序。
+- 不把 VSCode 窗口强制前置。
+- 不打开项目无关文件。
+- 不自动运行脚本。
+- 不改写文件内容。
+- 只打开本次新建或修改的文件。
+
+macOS 推荐命令：
+
+```bash
+open -g -a "Visual Studio Code" "/path/to/file.md"
+```

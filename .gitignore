@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.env.*
+*.key
+*.pem
+*.secret
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
