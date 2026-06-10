@@ -8,7 +8,7 @@
 
 | 标的 | 版本 | 原始数据 | 状态 |
 |------|------|---------|------|
-| 阳光电源 300274 | [sungrow_position_card_v0.1.1.md](sungrow_test/sungrow_position_card_v0.1.1.md) | [data_300274.json](sungrow_test/data_300274.json) | 长线看好 + 高波动趋势票；06-09 更新：盘中下探 144.57 后收回，收盘 152.5，重新回到 150 上方；150 收回是低位止跌尝试信号，但 153—155 仍未突破，量比 0.89，修复力度仍需继续验证 |
+| 阳光电源 300274 | [sungrow_position_card_v0.1.1.md](sungrow_test/sungrow_position_card_v0.1.1.md) | [data_300274.json](sungrow_test/data_300274.json) | 长线看好 + 高波动趋势票；06-10 更新：开盘 150.27，最高 150.44，最低 141.21，收盘 143.55，跌幅 -5.87%，成交额 93.78 亿，换手率 4.09%，量比 0.97。06-09 低位止跌尝试失败，150 再次转为上方压力，145—150 失守，140—145 成为当前风险观察区，138.61 员工持股均价心理锚开始靠近；今日未见新增公告级重大利空，但资金面偏弱，大盘 / 成长风格 / 新能源板块拖累需要继续补证。06-10 后，阳光电源估值卡已同步到 143.55 口径：价格进入更低估值再观察阶段，但是否具备修复价值仍需财务、储能毛利率、海外订单兑现、现金流、资金面和板块环境共同验证 |
 | 阳光电源 短线规则 | [sungrow_short_term_rules_v0.1.md](sungrow_test/sungrow_short_term_rules_v0.1.md) | — | 机动仓管理：三手拆分、卖出/买回触发、禁忌清单 |
 | 阳光电源 复盘记录 | [sungrow_review_2026-06-01.md](sungrow_test/sungrow_review_2026-06-01.md) | — | 高开反抽失败后破位整理，策略从冲 197 止盈切换为反抽处理机动仓 |
 | 阳光电源 复盘记录 | [sungrow_review_2026-06-02.md](sungrow_test/sungrow_review_2026-06-02.md) | — | 缩量弱势整理，恐慌减弱但修复未成立 |
@@ -17,11 +17,12 @@
 | 阳光电源 复盘记录 | [sungrow_review_2026-06-05.md](sungrow_test/sungrow_review_2026-06-05.md) | — | 连续破位后加速下探至 153 附近，原 160—163 低位区被跌破，弱势仍在延续 |
 | 阳光电源 复盘记录 | [sungrow_review_2026-06-08.md](sungrow/reviews/sungrow_review_2026-06-08.md) | — | 150 整数关口失守，收于 146.8，145—150 成为新低位观察区，153—155 转为短线反压区 |
 | 阳光电源 复盘记录 | [sungrow_review_2026-06-09.md](sungrow/reviews/sungrow_review_2026-06-09.md) | — | 盘中下探 144.57 后收回，收盘 152.5，重新回到 150 上方，153—155 仍为反压区，量比 0.89 修复力度仍需验证 |
+| 阳光电源 复盘记录 | [sungrow_review_2026-06-10.md](sungrow/reviews/sungrow_review_2026-06-10.md) | — | 开盘 150.27，最高 150.44，最低 141.21，收盘 143.55，跌幅 -5.87%，06-09 低位止跌尝试失败，150 再次转为上方压力，145—150 失守，140—145 成为当前风险观察区 |
 | 阳光电源 风险与跟踪 | [sungrow_risk_and_tracking_v0.1.md](sungrow_test/sungrow_risk_and_tracking_v0.1.md) | — | Top 5 风险、证伪条件、机动仓触发、跟踪指标 |
-| 阳光电源 估值与安全边际 | [sungrow_valuation_v0.1.md](sungrow_test/sungrow_valuation_v0.1.md) | — | PE/PB/PS 估算、三情景估值、安全边际判断、待补数据清单 |
+| 阳光电源 估值与安全边际 | [sungrow_valuation_v0.1.md](sungrow_test/sungrow_valuation_v0.1.md) | — | 06-10 更新：价格 143.55，成本 181，浮亏 -20.69%；价格进入更低估值再观察阶段，但不能简单视为低估；140—145 为当前风险观察区，138.61 心理锚已靠近但不是硬底；验证重点：Q2 财务、储能毛利率、海外订单兑现、现金流、资金面、板块环境 |
 | 阳光电源 同业对比 | [sungrow_peer_comparison_v0.1.md](sungrow_test/sungrow_peer_comparison_v0.1.md) | — | 可比公司框架（固德威/德业/锦浪/科华/上能/华为数字能源）、比较维度、待补数据清单 |
 | 阳光电源 行业与竞争格局 | [sungrow_industry_competition_v0.1.md](sungrow_test/sungrow_industry_competition_v0.1.md) | — | 储能/逆变器行业、海外订单、AIDC 新业务、新旧催化分类、竞争格局 |
-| 阳光电源 低位观察与补仓条件 | [sungrow_low_zone_observation_v0.1.md](sungrow_test/sungrow_low_zone_observation_v0.1.md) | — | 06-08 更新：153—155 转为反压区，150 转为第一修复位/反压，145—150 为当前低位观察区，140—145 为下一风险区，138.61 为心理锚 |
+| 阳光电源 低位观察与补仓条件 | [sungrow_low_zone_observation_v0.1.md](sungrow_test/sungrow_low_zone_observation_v0.1.md) | — | 06-10 更新：150 修复失败，145—150 由当前低位观察区转为上方弱修复区，140—145 成为当前风险观察区，138.61 员工持股均价心理锚靠近但不是硬底；大盘 / 成长风格 / 新能源板块拖累纳入后续验证项 |
 | 阳光电源 阶段总结 | [sungrow_phase_summary_2026-06-01_to_2026-06-05.md](sungrow_test/sungrow_phase_summary_2026-06-01_to_2026-06-05.md) | — | 06-01 至 06-05 连续破位走势回顾、消息面/资金面总结、阶段学习与当前策略 |
 
 ---
