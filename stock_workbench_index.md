@@ -86,12 +86,39 @@
 
 ## 小工坊规则与方法论
 
+### 固定节奏与命名规则
+
+> 十二字方针：不怕慢，就怕漏；不怕修，就怕乱。
+
+固定节奏：
+
+- 工作日：每日盘后复盘。
+- 每周日：制定下周观察计划。
+- 每次完成重要更新后：更新索引，git commit，push 到 GitHub 私库。
+
+文件命名：
+
+- 每日复盘文件使用交易日日期：`sungrow/reviews/sungrow_review_YYYY-MM-DD.md`。
+- 周观察文件使用做计划的周日日期：`weekly/weekly_market_watch_YYYY-MM-DD.md`。
+- 周观察正文标题使用做计划的周日日期。
+- 周观察正文必须写清楚下一个交易周的观察范围。
+- 周观察正文的回顾部分使用“上周总结 / 上周回顾”，不要写“本周总结”。
+- 周观察的上周回顾必须覆盖上一个完整交易周，不能只写最后几天。
+- 单票主线不能漏关键交易日，尤其是反弹日、破位日、放量日。
+
+示例：
+
+- `weekly_market_watch_2026-06-07.md`：周日制定，观察范围为 2026-06-08 至 2026-06-12。
+- `weekly_market_watch_2026-06-14.md`：周日制定，观察范围为 2026-06-15 至 2026-06-19。
+
+
 - [stock_deep_research_framework_v0.1.md](rules/stock_deep_research_framework_v0.1.md) — A股个股深度研究方法论
 - [portfolio_position_discipline_v0.1.md](rules/portfolio_position_discipline_v0.1.md) — 账户仓位纪律
 - [technical_rules_v0.1.md](rules/technical_rules_v0.1.md) — 技术指标规则
 - [industry_chain_analysis_v0.1.md](rules/industry_chain_analysis_v0.1.md) — 产业链分析规则
 - [weekly_market_watch_template_v0.1.md](weekly/weekly_market_watch_template_v0.1.md) — 周日下周观察计划模板
-- [weekly_market_watch_2026-06-08.md](weekly/weekly_market_watch_2026-06-08.md) — 周日下周观察计划｜2026-06-08
+- [weekly_market_watch_2026-06-07.md](weekly/weekly_market_watch_2026-06-07.md) — 周日下周观察计划｜2026-06-07
+- [weekly_market_watch_2026-06-14.md](weekly/weekly_market_watch_2026-06-14.md) — 周日下周观察计划｜2026-06-14（观察范围：06-15 至 06-19）
 - [market_data_source_rules_v0.1.md](rules/market_data_source_rules_v0.1.md) — 行情数据源规则
 
 > **数据源口径：** 行情数字以同花顺人工录入 / 后续指定行情源为准；Perplexity 只用于公告、新闻、行业和资金面交叉验证，不再作为开高低收、成交额、量比、换手率等行情数字来源。
