@@ -121,10 +121,15 @@
 - [weekly_market_watch_2026-06-07.md](weekly/weekly_market_watch_2026-06-07.md) — 周日下周观察计划｜2026-06-07
 - [weekly_market_watch_2026-06-14.md](weekly/weekly_market_watch_2026-06-14.md) — 周日下周观察计划｜2026-06-14（观察范围：06-15 至 06-19）
 - [market_data_source_rules_v0.1.md](rules/market_data_source_rules_v0.1.md) — 行情数据源规则
+- [quant_knowledge_sources_v0.1.md](rules/quant_knowledge_sources_v0.1.md) — 量化知识源索引，记录 awesome-quant-interview 的纳入原则、吸收边界与后续用途
+- [quant_indicator_design_rules_v0.1.md](rules/quant_indicator_design_rules_v0.1.md) — 量化指标设计规则，规定波动率、均值回归、动量、量价配合、相对强弱、回撤与风险暴露等指标只用于观察和复核
+- [quant_tool_candidates_v0.1.md](tools/quant_tool_candidates_v0.1.md) — 量化工具候选池，记录 Pandas / NumPy、Polars、VectorBT、Backtrader、Qlib、cvxpy、FinRL / FinGPT / FinRobot、RD-Agent 等工具的候选状态与使用边界
 
 > **数据源口径：** 行情数字以同花顺人工录入 / 后续指定行情源为准；Perplexity 只用于公告、新闻、行业和资金面交叉验证，不再作为开高低收、成交额、量比、换手率等行情数字来源。
 >
 > 2026-06-09 已完成 AKShare 最小试跑，300274 日线数据与同花顺人工口径一致；后续每日复盘可优先用 AKShare 取开高低收、涨跌幅、成交额、换手率，量比仍由同花顺人工补充。当前仍以同花顺为基准，AKShare 进入自动行情源候选。
+>
+> 2026-06 量化知识库更新：已纳入 awesome-quant-interview 作为量化研究地图，并创建量化知识源、量化指标设计规则、量化工具候选池三张卡；当前只吸收数据质检、轻量指标观察、周六股性研究框架，不进入自动交易、不生成买卖指令。
 
 ---
 
