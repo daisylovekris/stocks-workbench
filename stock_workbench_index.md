@@ -4,6 +4,18 @@
 
 ---
 
+## 规则与工具入口
+
+开工前先读这里，避免把工具当成最终决策来源，也避免把观察条件写成执行动作。
+
+- [rules/README.md](rules/README.md) — 股票小工坊规则索引，小工开工入口；
+- [rules/review_chain_update_rules_v0.1.md](rules/review_chain_update_rules_v0.1.md) — 复盘链路连续文档更新规则；
+- [repo_screening/daily_stock_analysis_fit_summary_2026-07-01.md](repo_screening/daily_stock_analysis_fit_summary_2026-07-01.md) — `daily_stock_analysis` 适配总结，定位为数据层 / 实时行情 / 技术快照 / 成本摊薄辅助，不接管仓位纪律。
+
+`daily_stock_analysis` 只能作为数据层和技术快照底座，不作为最终交易决策引擎，不替代风险卡、估值卡、加仓分析卡；成本摊薄计算只能说明补仓后的平均成本变化，不能自动推出加仓结论。
+
+---
+
 ## 当前样板卡
 
 | 标的 | 版本 | 原始数据 | 状态 |
