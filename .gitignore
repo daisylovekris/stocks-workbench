@@ -12,3 +12,6 @@ venv/
 .mypy_cache/
 .ipynb_checkpoints/
 archives/
+
+# Local MiMo Code files
+.mimocode/
