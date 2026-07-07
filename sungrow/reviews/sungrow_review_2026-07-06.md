@@ -170,8 +170,8 @@
 - `data/daily/300274_2026-07-06_facts.json`：本日 facts pack，已封箱。
 - `stock_workbench_index.md`：需挂入 07-06 日复盘入口，本轮同步。
 - `weekly/weekly_market_watch_2026-07-05.md`：本周观察框架参考。
-- `sungrow_test/sungrow_low_zone_observation_v0.1.md`：后续待同步。
-- `sungrow_test/sungrow_position_card_v0.1.1.md`：后续待同步。
-- `sungrow_test/sungrow_risk_and_tracking_v0.1.md`：后续待同步。
-- `sungrow_test/sungrow_valuation_v0.1.md`：后续待同步。
-- `sungrow_test/sungrow_add_position_analysis_v0.1.md`：后续待同步。
+- `sungrow_test/sungrow_low_zone_observation_v0.1.md`：已同步至 2026-07-06，已封箱。
+- `sungrow_test/sungrow_risk_and_tracking_v0.1.md`：已同步至 2026-07-06，已封箱。
+- `sungrow_test/sungrow_position_card_v0.1.1.md`：已同步至 2026-07-06，已封箱。
+- `sungrow_test/sungrow_valuation_v0.1.md`：已同步至 2026-07-06，已封箱。
+- `sungrow_test/sungrow_add_position_analysis_v0.1.md`：已同步至 2026-07-06，已封箱。
