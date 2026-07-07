@@ -17,16 +17,18 @@ A 股复盘行情取数通道 v0.1
 
 import argparse
 import json
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
 # 同花顺人工基准数据
+BENCHMARK_SYMBOL = "300274"
 THS_BENCHMARK = {
     # 当前人工基准对应 2026-07-03；后续每日复盘若切换日期，需同步更新这里
     "日期": "2026-07-03",
-    "股票代码": "300274",
+    "股票代码": BENCHMARK_SYMBOL,
     "股票名称": "阳光电源",
     "开盘": 127.80,
     "最高": 131.46,
@@ -84,6 +86,7 @@ def parse_args():
     parser.add_argument("--date", default=THS_BENCHMARK["日期"], help="查询日期，默认当前人工基准日期")
     parser.add_argument("--period", default="daily", help="周期，默认 daily")
     parser.add_argument("--adjust", default="", help="复权类型，默认空字符串")
+    parser.add_argument("--output-json", default=None, help="可选输出最小 facts JSON 的路径")
     return parser.parse_args()
 
 
@@ -136,6 +139,105 @@ def _derive_pct_change(close_value, prev_close_value):
     if close_value is None or prev_close_value in (None, 0):
         return None
     return ((close_value - prev_close_value) / prev_close_value) * 100
+
+
+def _volume_ratio_verification(candidate_value, benchmark_value, tolerance):
+    """构造量比验证状态，区分 candidate / confirmed / conflict / needs_manual_check。"""
+    if candidate_value is None and benchmark_value is None:
+        return {
+            "status": "needs_manual_check",
+            "confirmed_by": "none",
+            "notes": "缺少候选量比，需人工确认",
+        }
+
+    if candidate_value is None:
+        return {
+            "status": "needs_manual_check",
+            "confirmed_by": "none",
+            "notes": "缺少候选量比，需人工确认",
+        }
+
+    if benchmark_value is None:
+        return {
+            "status": "candidate",
+            "confirmed_by": "tencent_candidate",
+            "notes": "仅候选值，未人工确认",
+        }
+
+    if abs(candidate_value - benchmark_value) <= tolerance:
+        return {
+            "status": "confirmed",
+            "confirmed_by": "manual_ths",
+            "notes": "候选量比与同花顺人工基准一致 / 在容差内",
+        }
+
+    return {
+        "status": "conflict",
+        "confirmed_by": "manual_ths",
+        "notes": "两源量比不一致，需人工复核",
+    }
+
+
+def build_facts_json(args, tencent_data, realtime_volume_ratio):
+    """构造最小 facts pack JSON 结构。"""
+    benchmark_volume_ratio = THS_BENCHMARK.get("量比")
+    candidate_volume_ratio = realtime_volume_ratio.get("candidate_value")
+
+    prev_close = THS_BENCHMARK.get("昨收")
+    pct_change = tencent_data.get("涨跌幅")
+    if pct_change is None:
+        pct_change = _derive_pct_change(tencent_data.get("收盘"), prev_close)
+
+    volume_ratio_status = _volume_ratio_verification(
+        candidate_volume_ratio,
+        benchmark_volume_ratio,
+        0.05,
+    )
+    confirmed_value = benchmark_volume_ratio if volume_ratio_status["status"] == "confirmed" else None
+
+    facts = {
+        "schema_version": "facts_pack_v0.1",
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "trade_date": args.date,
+        "symbol": args.symbol,
+        "name": THS_BENCHMARK.get("股票名称"),
+        "quote": {
+            "open": tencent_data.get("开盘"),
+            "high": tencent_data.get("最高"),
+            "low": tencent_data.get("最低"),
+            "close": tencent_data.get("收盘"),
+            "prev_close": prev_close,
+            "pct_change": pct_change,
+            "amount": tencent_data.get("成交额"),
+            "turnover_rate": tencent_data.get("换手率"),
+        },
+        "volume_ratio": {
+            "candidate_value": candidate_volume_ratio,
+            "confirmed_value": confirmed_value,
+            "verification": volume_ratio_status,
+        },
+        "missing": {
+            "market_indices": None,
+            "sector_context": None,
+            "disclosure_status": None,
+            "news_policy_context": None,
+        },
+        "needs_manual_check": {
+            "volume_ratio": volume_ratio_status["status"] != "confirmed",
+            "market_indices": True,
+            "sector_context": True,
+            "disclosure_status": True,
+            "news_policy_context": True,
+        },
+    }
+    return facts
+
+
+def write_facts_json(output_path, facts):
+    """写入 facts JSON，确保父目录存在。"""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(facts, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def get_tencent_realtime_volume_ratio(symbol: str) -> dict:
@@ -407,6 +509,13 @@ def main():
         print("日期不匹配，未发起任何联网请求。")
         return
 
+    if args.output_json and args.symbol != BENCHMARK_SYMBOL:
+        print("错误：当前 facts JSON MVP 只支持 THS_BENCHMARK 对应标的。")
+        print(f"requested symbol: {args.symbol}")
+        print(f"benchmark symbol: {BENCHMARK_SYMBOL}")
+        print("若要支持多票，需要后续引入 per-symbol benchmark/config，不得临时混用当前 THS_BENCHMARK。")
+        return
+
     # 导入 akshare
     try:
         import akshare as ak
@@ -561,6 +670,12 @@ def main():
             print("注：候选量比与人工核对冲突，不入主链。")
     else:
         print("注：腾讯实时量比仅作候选字段，仍需同花顺人工核对。")
+
+    if args.output_json:
+        facts = build_facts_json(args, tencent_data, realtime_volume_ratio)
+        write_facts_json(args.output_json, facts)
+        print()
+        print(f"facts JSON 已写入: {args.output_json}")
 
 
 if __name__ == "__main__":
