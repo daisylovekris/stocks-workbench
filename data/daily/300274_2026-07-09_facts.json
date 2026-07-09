@@ -1,0 +1,40 @@
+{
+  "schema_version": "facts_pack_v0.1",
+  "generated_at": "2026-07-09T17:54:43+00:00",
+  "trade_date": "2026-07-09",
+  "symbol": "300274",
+  "name": "阳光电源",
+  "quote": {
+    "open": 124.0,
+    "high": 124.6,
+    "low": 118.06,
+    "close": 124.01,
+    "prev_close": 124.49,
+    "pct_change": -0.38557313840468294,
+    "amount": 81.70923132,
+    "turnover_rate": 4.24254606016208
+  },
+  "volume_ratio": {
+    "candidate_value": 1.19,
+    "confirmed_value": 1.19,
+    "verification": {
+      "status": "manual_confirmed",
+      "confirmed_by": "user_manual_check",
+      "notes": "User manually confirmed 2026-07-09 volume ratio as 1.19; value belongs to the 2026-07-09 trading day."
+    },
+    "source": "manual_check"
+  },
+  "missing": {
+    "market_indices": null,
+    "sector_context": null,
+    "disclosure_status": null,
+    "news_policy_context": null
+  },
+  "needs_manual_check": {
+    "volume_ratio": false,
+    "market_indices": true,
+    "sector_context": true,
+    "disclosure_status": true,
+    "news_policy_context": true
+  }
+}
