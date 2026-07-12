@@ -1,0 +1,20 @@
+{
+  "status": "date_mismatch",
+  "source": "tencent",
+  "target_date": "2026-07-10",
+  "source_date": "2026-07-09",
+  "quote": {
+    "open": 124.0,
+    "high": 124.6,
+    "low": 118.06,
+    "close": 124.01,
+    "prev_close": 124.49,
+    "amount": 81.70923132,
+    "turnover_rate": 4.24254606016208
+  },
+  "source_pct_change": -0.38557313840468294,
+  "fetched_at": "2026-07-13T00:00:00Z",
+  "error_type": "date_mismatch",
+  "error_message": "returned dates do not include target date 2026-07-10",
+  "errors": []
+}

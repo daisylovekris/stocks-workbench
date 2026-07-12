@@ -1,0 +1,20 @@
+{
+  "status": "ok",
+  "source": "tencent",
+  "target_date": "2026-07-10",
+  "source_date": "2026-07-10",
+  "quote": {
+    "open": 123.17,
+    "high": 123.8,
+    "low": 114.0,
+    "close": 114.79,
+    "prev_close": 124.01,
+    "amount": 111.28,
+    "turnover_rate": 5.92
+  },
+  "source_pct_change": -7.434884283525522,
+  "fetched_at": "2026-07-13T00:00:00Z",
+  "error_type": null,
+  "error_message": null,
+  "errors": []
+}
