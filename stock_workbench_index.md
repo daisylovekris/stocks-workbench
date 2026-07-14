@@ -156,6 +156,7 @@
 - [weekly_market_watch_2026-06-21.md](weekly/weekly_market_watch_2026-06-21.md) — 周日下周观察计划｜2026-06-21（观察范围：06-22 至 06-26）
 - [weekly_market_watch_2026-06-28.md](weekly/weekly_market_watch_2026-06-28.md) — 周日观察计划｜观察范围：2026-06-29 至 2026-07-03；上周主线为 06-22 强修复后连续多日验证不足，06-26 虽在指数和新能源链大跌中相对抗跌，但试攻 160 失败，153—155 盘中收回后收盘跌回，修复仍未确认；下周重点观察 153—155、157/160、150、145—150 及新能源 / 储能 / 光伏设备板块与量能是否改善
 - [weekly_market_watch_2026-07-05.md](weekly/weekly_market_watch_2026-07-05.md) — 周日观察计划｜观察范围：2026-07-06 至 2026-07-10；07-03 收盘 126.16，正式跌破 127.18 / 127.30，低位风险继续抬升；下周重点观察 126.10、126.16 / 127.18 / 127.30 的收回与否，以及外部逆变器政策预期、板块分化和量能是否变化
+- [weekly_market_watch_2026-07-12.md](weekly/weekly_market_watch_2026-07-12.md) — 周日观察计划｜截至 2026-07-10 收盘，周内观察区间：2026-07-06 至 2026-07-10；上周主线由缩量低位反弹逐步转为放量下挫后的修复链失败，短线风险继续抬升；下周只登记历史观察条件，具体价位身份见原文件
 - [market_data_source_rules_v0.1.md](rules/market_data_source_rules_v0.1.md) — 行情数据源规则
 - [quant_knowledge_sources_v0.1.md](rules/quant_knowledge_sources_v0.1.md) — 量化知识源索引，记录 awesome-quant-interview 的纳入原则、吸收边界与后续用途
 - [quant_indicator_design_rules_v0.1.md](rules/quant_indicator_design_rules_v0.1.md) — 量化指标设计规则，规定波动率、均值回归、动量、量价配合、相对强弱、回撤与风险暴露等指标只用于观察和复核
