@@ -1,0 +1,67 @@
+{
+  "schema_version": "facts_pack_v0.2",
+  "generated_at": "2026-07-14T15:43:07Z",
+  "trade_date": "2026-07-13",
+  "symbol": "300274",
+  "name": "300274",
+  "quote": {
+    "open": 112.54,
+    "high": 114.05,
+    "low": 106.8,
+    "close": 108.0,
+    "prev_close": 114.79,
+    "pct_change": -5.915149403258124,
+    "amount": 81.68368808,
+    "turnover_rate": null
+  },
+  "quote_verification": {
+    "status": "confirmed",
+    "source_pct_change": null,
+    "derived_pct_change": -5.915149403258124,
+    "delta": null,
+    "source": "tencent",
+    "source_date": "2026-07-13",
+    "fetched_at": "2026-07-14T15:43:00Z",
+    "notes": "source pct_change unavailable",
+    "error_type": null,
+    "error_message": null
+  },
+  "volume_ratio": {
+    "candidate_value": null,
+    "confirmed_value": null,
+    "source": null,
+    "verification": {
+      "status": "needs_manual_check",
+      "method": "unavailable",
+      "confirmed_by": "none",
+      "source": null,
+      "source_date": null,
+      "fetched_at": "2026-07-14T15:43:00Z",
+      "notes": "volume_ratio unavailable; requires manual confirmation",
+      "error_type": null,
+      "error_message": null
+    }
+  },
+  "missing": {
+    "market_indices": null,
+    "sector_context": null,
+    "disclosure_status": null,
+    "news_policy_context": null
+  },
+  "needs_manual_check": {
+    "volume_ratio": true,
+    "market_indices": true,
+    "sector_context": true,
+    "disclosure_status": true,
+    "news_policy_context": true
+  },
+  "run": {
+    "status": "partial",
+    "requested_source": "tencent",
+    "source_used": "tencent",
+    "target_date": "2026-07-13",
+    "fetched_at": "2026-07-14T15:43:00Z",
+    "errors": [],
+    "name_source": "symbol_fallback"
+  }
+}
