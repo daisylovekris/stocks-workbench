@@ -38,8 +38,27 @@
   "volume_ratio": {
     "candidate_value": 1.49,
     "confirmed_value": 1.49,
-    "source": "tencent_qt_direct_index_49+sohu_five_day_volume",
+    "source": "archived_tencent_snapshot+sohu_history",
     "verification": {
+      "status": "confirmed",
+      "method": "archived_tencent_snapshot_plus_sohu_historical_reverification",
+      "confirmed_by": "automation_cross_check",
+      "source": "archived_tencent_snapshot+sohu_history",
+      "source_date": "2026-07-14",
+      "fetched_at": "2026-07-14T21:04:50Z",
+      "notes": "legacy Tencent 2026-07-14 snapshot value retained from archived facts pack; Sohu historical OHLC and five-day volume evidence used for post-hoc reverification",
+      "error_type": null,
+      "error_message": null
+    },
+    "cross_check": {
+      "value": 1.49,
+      "source": "sohu_five_day_volume_derived",
+      "source_date": "2026-07-14",
+      "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+      "tolerance": 0.05,
+      "delta": 0.0
+    },
+    "legacy_verification": {
       "status": "confirmed",
       "method": "same_day_snapshot_plus_sohu_five_day_cross_check",
       "confirmed_by": "automation_cross_check",
@@ -50,12 +69,122 @@
       "error_type": null,
       "error_message": null
     },
-    "cross_check": {
-      "value": 1.49,
-      "source": "sohu_five_day_volume_derived",
+    "archived_snapshot_source": {
+      "source": "tencent_qt_direct_index_49",
       "source_date": "2026-07-14",
-      "tolerance": 0.05,
-      "delta": 0.0
+      "ohlc": {
+        "open": 108.0,
+        "high": 109.26,
+        "low": 100.73,
+        "close": 108.29
+      },
+      "previous_close": 108.0,
+      "pct_change": 0.2685185185185235,
+      "amount": 100.65149576,
+      "turnover_rate": 6.05,
+      "volume_ratio": 1.49,
+      "original_fetched_at": "2026-07-14T21:04:50Z",
+      "source_pack_paths": [
+        "quote.open",
+        "quote.high",
+        "quote.low",
+        "quote.close",
+        "quote.prev_close",
+        "quote.pct_change",
+        "quote.amount",
+        "quote.turnover_rate",
+        "volume_ratio.candidate_value",
+        "volume_ratio.confirmed_value",
+        "volume_ratio.verification.fetched_at"
+      ]
+    },
+    "historical_ohlc_check": {
+      "status": "passed",
+      "archived_source": "tencent_qt_direct_index_49",
+      "archived_source_date": "2026-07-14",
+      "historical_source": "sohu_history",
+      "historical_source_date": "2026-07-14",
+      "ohlc": {
+        "open": 108.0,
+        "high": 109.26,
+        "low": 100.73,
+        "close": 108.29
+      },
+      "archived_ohlc": {
+        "open": 108.0,
+        "high": 109.26,
+        "low": 100.73,
+        "close": 108.29
+      },
+      "tolerance": 0.02,
+      "compared_fields": [
+        "open",
+        "high",
+        "low",
+        "close"
+      ],
+      "field_results": {
+        "open": {
+          "left": 108.0,
+          "right": 108.0,
+          "delta": 0.0,
+          "matched": true
+        },
+        "high": {
+          "left": 109.26,
+          "right": 109.26,
+          "delta": 0.0,
+          "matched": true
+        },
+        "low": {
+          "left": 100.73,
+          "right": 100.73,
+          "delta": 0.0,
+          "matched": true
+        },
+        "close": {
+          "left": 108.29,
+          "right": 108.29,
+          "delta": 0.0,
+          "matched": true
+        }
+      },
+      "fetched_at": "2026-07-15T14:38:28Z",
+      "source": "sohu_history",
+      "source_date": "2026-07-14"
+    },
+    "five_day_volume_check": {
+      "status": "passed",
+      "source": "sohu_history",
+      "trade_dates": [
+        "2026-07-07",
+        "2026-07-08",
+        "2026-07-09",
+        "2026-07-10",
+        "2026-07-13",
+        "2026-07-14"
+      ],
+      "volumes": [
+        442203.0,
+        413086.0,
+        673516.0,
+        939380.0,
+        745683.0,
+        960311.0
+      ],
+      "target_volume": 960311.0,
+      "calculated_value": 1.49,
+      "expected_value": 1.49,
+      "tolerance": 0.02,
+      "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+      "fetched_at": "2026-07-15T14:38:28Z"
+    },
+    "migration": {
+      "old_file_sha256": "f6f4fa60397f4c7bd41be36cf6c71b4bc3b24011872d13c1c90ccfcba1d681be",
+      "migrated_at": "2026-07-15T14:38:29Z",
+      "tool_version": "migrate_legacy_volume_ratio_evidence_v0.1",
+      "tool": "tools/migrate_legacy_volume_ratio_evidence.py",
+      "migration_type": "legacy_archived_tencent_snapshot_reverification"
     }
   },
   "missing": {

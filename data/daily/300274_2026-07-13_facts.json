@@ -57,6 +57,67 @@
       "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
       "tolerance": 0.01,
       "delta": 0.0
+    },
+    "source_volume_checks": {
+      "sohu_history": {
+        "status": "passed",
+        "source": "sohu_history",
+        "trade_dates": [
+          "2026-07-06",
+          "2026-07-07",
+          "2026-07-08",
+          "2026-07-09",
+          "2026-07-10",
+          "2026-07-13"
+        ],
+        "volumes": [
+          522306.0,
+          442203.0,
+          413086.0,
+          673516.0,
+          939380.0,
+          745683.0
+        ],
+        "target_volume": 745683.0,
+        "calculated_value": 1.25,
+        "expected_value": 1.25,
+        "tolerance": 0.01,
+        "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+        "fetched_at": "2026-07-15T15:27:12Z"
+      },
+      "tencent_history": {
+        "status": "passed",
+        "source": "tencent_history",
+        "trade_dates": [
+          "2026-07-06",
+          "2026-07-07",
+          "2026-07-08",
+          "2026-07-09",
+          "2026-07-10",
+          "2026-07-13"
+        ],
+        "volumes": [
+          522306.0,
+          442203.0,
+          413086.0,
+          673516.0,
+          939380.0,
+          745683.0
+        ],
+        "target_volume": 745683.0,
+        "calculated_value": 1.25,
+        "expected_value": 1.25,
+        "tolerance": 0.01,
+        "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+        "fetched_at": "2026-07-15T15:27:11Z"
+      }
+    },
+    "migration": {
+      "old_file_sha256": "7ac8065537ca6e8becbea79e9ead3a810fe1ea7d5008b108b54218f21025061f",
+      "migrated_at": "2026-07-15T15:27:13Z",
+      "tool_version": "migrate_legacy_volume_ratio_evidence_v0.1",
+      "tool": "tools/migrate_legacy_volume_ratio_evidence.py",
+      "migration_type": "historical_dual_source_volume_evidence_enrichment"
     }
   },
   "missing": {
