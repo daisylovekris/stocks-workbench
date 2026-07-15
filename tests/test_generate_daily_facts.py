@@ -175,6 +175,16 @@ def make_sohu_volume_result():
         "status": "ok",
         "source": "sohu",
         "source_date": "2026-07-14",
+        "quote": {
+            "open": 108.0,
+            "high": 109.26,
+            "low": 100.73,
+            "close": 108.29,
+            "prev_close": 108.0,
+            "amount": 100.6515,
+            "turnover_rate": 6.05,
+        },
+        "fetched_at": "2026-07-15T00:00:00Z",
         "rows": [
             {"date": "2026-07-06", "volume": "522306"},
             {"date": "2026-07-07", "volume": "442203"},
@@ -339,8 +349,98 @@ class GenerateDailyFactsTests(unittest.TestCase):
         self.assertEqual(candidate["verification_status"], "confirmed")
         self.assertEqual(candidate["confirmed_by"], "automation_cross_check")
         self.assertEqual(candidate["cross_check"]["value"], 1.49)
-        self.assertEqual(candidate["snapshot_ohlc_check"]["status"], "matched")
-        self.assertEqual(candidate["snapshot_ohlc_check"]["fields"], ["open", "high", "low", "close"])
+        self.assertEqual(candidate["snapshot_ohlc_check"]["status"], "passed")
+        self.assertEqual(candidate["snapshot_ohlc_check"]["compared_fields"], ["open", "high", "low", "close"])
+        self.assertEqual(candidate["snapshot_ohlc_check"]["snapshot_source"], "tencent_qt_direct_index_49")
+        self.assertEqual(candidate["snapshot_ohlc_check"]["matched_to"], "sohu_history")
+        self.assertIn("field_results", candidate["snapshot_ohlc_check"])
+        self.assertEqual(candidate["five_day_volume_check"]["status"], "passed")
+        self.assertEqual(candidate["five_day_volume_check"]["source"], "sohu_history")
+        self.assertEqual(candidate["five_day_volume_check"]["calculated_value"], 1.49)
+
+    def test_generator_same_day_volume_ratio_facts_pass_validator(self):
+        quote_text = f'v_sz300274="{"~".join(make_tencent_qt_fields())}";'
+
+        def fake_http(url, **_kwargs):
+            return quote_text if "qt.gtimg.cn" in url else make_tencent_kline_payload(include_qt=False)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "facts.json"
+            review = Path(tmpdir) / "review.md"
+            review.write_text("## 当前结论\n仅作观察，不输出买卖动作。\n", encoding="utf-8")
+            existing = {
+                "symbol": "300274",
+                "trade_date": "2026-07-14",
+                "name": "阳光电源",
+                "needs_manual_check": {
+                    "volume_ratio": False,
+                    "market_indices": False,
+                    "sector_context": False,
+                    "disclosure_status": False,
+                    "news_policy_context": False,
+                },
+                "missing": {
+                    "market_indices": None,
+                    "sector_context": None,
+                    "disclosure_status": None,
+                    "news_policy_context": None,
+                },
+            }
+            output.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            args = make_args(output=str(output), date="2026-07-14", source="tencent")
+            quote_result = make_quote_result(
+                status="ok",
+                source="tencent",
+                source_date="2026-07-14",
+                quote={
+                    "open": 108.0,
+                    "high": 109.26,
+                    "low": 100.73,
+                    "close": 108.29,
+                    "prev_close": 108.0,
+                    "amount": 100.65149576,
+                    "turnover_rate": 6.05,
+                },
+                source_pct_change=0.27,
+            )
+            quote_result["field_sources"] = {"amount": "tencent_qt_snapshot", "turnover_rate": "tencent_qt_snapshot"}
+            with (
+                mock.patch.object(gdf, "_http_get_text_direct", side_effect=fake_http),
+                mock.patch.object(gdf, "fetch_sohu_quote", return_value=make_sohu_volume_result()),
+            ):
+                outcome = gdf.run(
+                    args,
+                    fetch_primary=make_fetcher(quote_result),
+                    fetch_fallback=make_error_fetcher("source_error", "unused"),
+                    volume_ratio_candidate_provider=gdf.fetch_volume_ratio_candidate,
+                )
+
+            self.assertEqual(outcome.exit_code, gdf.EXIT_SUCCESS)
+            facts = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(facts["volume_ratio"]["verification"]["method"], "same_day_snapshot_plus_sohu_five_day_cross_check")
+            self.assertIn("snapshot_ohlc_check", facts["volume_ratio"])
+            self.assertIn("five_day_volume_check", facts["volume_ratio"])
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(VALIDATOR),
+                    "--files",
+                    str(review),
+                    "--date",
+                    "2026-07-14",
+                    "--previous-date",
+                    "2026-07-13",
+                    "--key-levels",
+                    "100.73,108.00,108.29,109.26",
+                    "--facts-pack",
+                    str(output),
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_volume_ratio_uses_embedded_snapshot_when_direct_quote_fails(self):
         def fake_http(url, **_kwargs):
@@ -357,6 +457,22 @@ class GenerateDailyFactsTests(unittest.TestCase):
         self.assertEqual(candidate["candidate_value"], 1.49)
         self.assertIn("tencent_kline_embedded_qt_index_49", candidate["source"])
         self.assertEqual(candidate["snapshot_ohlc_check"]["snapshot_source"], "tencent_kline_embedded_qt_index_49")
+
+    def test_volume_ratio_snapshot_date_mismatch_does_not_use_same_day_confirmation(self):
+        fields = make_tencent_qt_fields(source_timestamp="20260715161436")
+        quote_text = f'v_sz300274="{"~".join(fields)}";'
+
+        def fake_http(url, **_kwargs):
+            return quote_text if "qt.gtimg.cn" in url else make_tencent_kline_payload(include_qt=False)
+
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", side_effect=fake_http),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value=make_sohu_volume_result()),
+        ):
+            candidate = gdf.fetch_volume_ratio_candidate("300274", "2026-07-14", 15.0)
+        self.assertEqual(candidate["method"], "historical_five_day_volume_cross_check")
+        self.assertEqual(candidate["verification_status"], "confirmed")
+        self.assertNotIn("snapshot_ohlc_check", candidate)
 
     def test_volume_ratio_direct_snapshot_ohlc_mismatch_downgrades_to_historical_confirmed(self):
         fields = make_tencent_qt_fields(overrides={3: "109.99"})
@@ -1235,6 +1351,12 @@ class GenerateDailyFactsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "facts.json"
             existing = load_fixture("existing_manual_confirmed_status.json")
+            existing["volume_ratio"]["manual_verification"] = {
+                "decided_by": "test",
+                "decided_at": "2026-07-10T16:00:00Z",
+                "source": "test fixture",
+                "reason": "manual fixture value",
+            }
             output.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             args = make_args(output=str(output), source="auto")
             outcome = gdf.run(
@@ -1339,6 +1461,12 @@ class GenerateDailyFactsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "facts.json"
             existing = load_fixture("existing_manual_confirmed_status.json")
+            existing["volume_ratio"]["manual_verification"] = {
+                "decided_by": "test",
+                "decided_at": "2026-07-10T16:00:00Z",
+                "source": "test fixture",
+                "reason": "manual fixture value",
+            }
             output.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             args = make_args(output=str(output), source="auto", no_write=True)
             candidate = load_fixture("volume_ratio_candidate_wrong_day.json")
@@ -1360,6 +1488,12 @@ class GenerateDailyFactsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "facts.json"
             existing = load_fixture("existing_manual_confirmed_status.json")
+            existing["volume_ratio"]["manual_verification"] = {
+                "decided_by": "test",
+                "decided_at": "2026-07-10T16:00:00Z",
+                "source": "test fixture",
+                "reason": "manual fixture value",
+            }
             output.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             args = make_args(output=str(output), source="auto", no_write=True)
             candidate = load_fixture("volume_ratio_candidate_same_day.json")
@@ -1379,6 +1513,12 @@ class GenerateDailyFactsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "facts.json"
             existing = load_fixture("existing_manual_confirmed_status.json")
+            existing["volume_ratio"]["manual_verification"] = {
+                "decided_by": "test",
+                "decided_at": "2026-07-10T16:00:00Z",
+                "source": "test fixture",
+                "reason": "manual fixture value",
+            }
             output.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             args = make_args(output=str(output), source="auto", no_write=True)
             candidate = load_fixture("volume_ratio_candidate_wrong_day.json")
@@ -1526,12 +1666,17 @@ class GenerateDailyFactsTests(unittest.TestCase):
     def test_atomic_write_failure_keeps_original_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "facts.json"
-            original = "{\"original\": true}\n"
+            existing = load_fixture("existing_manual_confirmed_status.json")
+            original = json.dumps(existing, ensure_ascii=False, indent=2) + "\n"
             output.write_text(original, encoding="utf-8")
-            payload = load_fixture("tencent_quote_0710.json")
+            args = make_args(output=str(output), source="tencent")
             with mock.patch.object(gdf.os, "replace", side_effect=OSError("replace failed")):
                 with self.assertRaises(OSError):
-                    gdf.atomic_write_json(output, payload)
+                    gdf.run(
+                        args,
+                        fetch_primary=make_fetcher(load_fixture("tencent_quote_0710.json")),
+                        fetch_fallback=make_error_fetcher("source_error", "unused"),
+                    )
             self.assertEqual(output.read_text(encoding="utf-8"), original)
             self.assertEqual(list(output.parent.glob("*.tmp")), [])
 
@@ -1548,15 +1693,20 @@ class GenerateDailyFactsTests(unittest.TestCase):
                 "0",
             ])
 
-    def test_atomic_write_json(self):
+    def test_formal_generator_write_transaction(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "facts.json"
-            payload = load_fixture("tencent_quote_0710.json")
-            gdf.atomic_write_json(output, payload)
+            args = make_args(output=str(output), source="tencent", write_partial=True)
+            outcome = gdf.run(
+                args,
+                fetch_primary=make_fetcher(load_fixture("tencent_quote_0710.json")),
+                fetch_fallback=make_error_fetcher("source_error", "unused"),
+            )
             self.assertTrue(output.exists())
             written = json.loads(output.read_text(encoding="utf-8"))
-            self.assertEqual(written["source"], "tencent")
-            self.assertEqual(written["source_date"], "2026-07-10")
+            self.assertEqual(written["run"]["source_used"], "tencent")
+            self.assertEqual(written["trade_date"], "2026-07-10")
+            self.assertEqual(outcome.output_sha256, gdf.ofl.sha256_file(output))
             tmp_residuals = list(output.parent.glob("*.tmp"))
             self.assertEqual(tmp_residuals, [])
 
@@ -1590,6 +1740,12 @@ class GenerateDailyFactsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "facts.json"
             existing = load_fixture("existing_manual_confirmed_status.json")
+            existing["volume_ratio"]["manual_verification"] = {
+                "decided_by": "test",
+                "decided_at": "2026-07-10T16:00:00Z",
+                "source": "test fixture",
+                "reason": "manual fixture value",
+            }
             output.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             args = make_args(output=str(output), source="auto")
             outcome = gdf.run(

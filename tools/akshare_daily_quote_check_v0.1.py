@@ -19,10 +19,20 @@ A 股复盘行情基准校准工具 v0.1（legacy benchmark diagnostic）
 
 import argparse
 import json
+import os
+import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools import official_facts_lock as ofl  # noqa: E402
 
 
 # 同花顺人工基准数据
@@ -101,6 +111,7 @@ def parse_args():
     parser.add_argument("--period", default="daily", help="周期，默认 daily")
     parser.add_argument("--adjust", default="", help="复权类型，默认空字符串")
     parser.add_argument("--output-json", default=None, help="可选输出最小 facts JSON 的路径")
+    parser.add_argument("--lock-dir", default=None, help="测试时覆盖正式 facts 共享锁目录")
     return parser.parse_args()
 
 
@@ -247,11 +258,158 @@ def build_facts_json(args, tencent_data, realtime_volume_ratio):
     return facts
 
 
-def write_facts_json(output_path, facts):
-    """写入 facts JSON，确保父目录存在。"""
-    path = Path(output_path)
+def parse_existing_official_bytes(data, *, symbol, target_date):
+    """Parse the locked existing target without changing its legacy schema."""
+    if data is None:
+        return None
+    try:
+        existing = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"existing official JSON is invalid: {exc}") from exc
+    if not isinstance(existing, dict):
+        raise ValueError("existing official JSON root must be an object")
+    if existing.get("symbol") != symbol or existing.get("trade_date") != target_date:
+        raise ValueError("existing official identity does not match requested symbol/date")
+    return existing
+
+
+def validate_facts_json_structure(facts, *, symbol, target_date):
+    """Validate the frozen v0.1 diagnostic facts shape.
+
+    The review-chain facts validator requires the newer method-specific evidence
+    contract.  This frozen benchmark intentionally emits ``facts_pack_v0.1`` and
+    has no such method field, so this writer uses an exact local structure gate
+    instead of weakening or bypassing the review-chain rules.
+    """
+    if not isinstance(facts, dict):
+        raise ValueError("facts JSON root must be an object")
+    if facts.get("schema_version") != "facts_pack_v0.1":
+        raise ValueError("facts JSON schema_version must remain facts_pack_v0.1")
+    if facts.get("symbol") != symbol or facts.get("trade_date") != target_date:
+        raise ValueError("facts JSON identity does not match requested symbol/date")
+    quote = facts.get("quote")
+    if not isinstance(quote, dict):
+        raise ValueError("facts JSON quote must be an object")
+    quote_fields = {
+        "open",
+        "high",
+        "low",
+        "close",
+        "prev_close",
+        "pct_change",
+        "amount",
+        "turnover_rate",
+    }
+    if set(quote) != quote_fields:
+        raise ValueError("facts JSON quote fields do not match the frozen v0.1 schema")
+    for field, value in quote.items():
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            raise ValueError(f"facts JSON quote.{field} must be numeric or null")
+    volume_ratio = facts.get("volume_ratio")
+    verification = volume_ratio.get("verification") if isinstance(volume_ratio, dict) else None
+    if not isinstance(volume_ratio, dict) or not isinstance(verification, dict):
+        raise ValueError("facts JSON volume_ratio verification is missing")
+    if verification.get("status") not in {
+        "candidate",
+        "confirmed",
+        "conflict",
+        "needs_manual_check",
+    }:
+        raise ValueError("facts JSON volume_ratio verification.status is invalid")
+    context_keys = {
+        "market_indices",
+        "sector_context",
+        "disclosure_status",
+        "news_policy_context",
+    }
+    if set(facts.get("missing", {})) != context_keys:
+        raise ValueError("facts JSON missing fields do not match the frozen v0.1 schema")
+    expected_manual_keys = {"volume_ratio", *context_keys}
+    if set(facts.get("needs_manual_check", {})) != expected_manual_keys:
+        raise ValueError("facts JSON needs_manual_check fields do not match the frozen v0.1 schema")
+    json.dumps(facts, ensure_ascii=False, allow_nan=False)
+
+
+def _write_facts_bytes_locked(path, payload_bytes, *, expected_sha256, lock_state):
+    lock_state.assert_held_for(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(facts, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "wb",
+            dir=str(path.parent),
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            tmp_path = Path(handle.name)
+            handle.write(payload_bytes)
+            handle.flush()
+            os.fsync(handle.fileno())
+        ofl.read_locked_official(
+            path,
+            expected_sha256=expected_sha256,
+            lock_state=lock_state,
+        )
+        os.replace(tmp_path, path)
+        try:
+            dir_fd = os.open(str(path.parent), os.O_DIRECTORY)
+        except OSError:
+            dir_fd = None
+        if dir_fd is not None:
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        final_bytes, final_sha256 = ofl.read_current_official(
+            path,
+            lock_state=lock_state,
+        )
+        if final_bytes != payload_bytes or final_sha256 is None:
+            raise RuntimeError("written official facts do not match AKShare bytes")
+        return final_sha256
+    finally:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+
+
+def write_facts_json(
+    output_path,
+    *,
+    args,
+    tencent_data,
+    realtime_volume_ratio,
+    expected_sha256,
+    lock_dir=None,
+):
+    """Build, validate, write, and fingerprint the frozen facts under one lock."""
+    path = Path(output_path)
+    resolved_lock_dir = Path(lock_dir) if lock_dir else None
+    with ofl.official_facts_lock(path, lock_dir=resolved_lock_dir) as lock_state:
+        official_bytes, _actual_sha256 = ofl.read_locked_official(
+            path,
+            expected_sha256=expected_sha256,
+            lock_state=lock_state,
+        )
+        parse_existing_official_bytes(
+            official_bytes,
+            symbol=args.symbol,
+            target_date=args.date,
+        )
+        facts = build_facts_json(args, tencent_data, realtime_volume_ratio)
+        validate_facts_json_structure(
+            facts,
+            symbol=args.symbol,
+            target_date=args.date,
+        )
+        payload_bytes = (json.dumps(facts, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        final_sha256 = _write_facts_bytes_locked(
+            path,
+            payload_bytes,
+            expected_sha256=expected_sha256,
+            lock_state=lock_state,
+        )
+        return facts, final_sha256
 
 
 def get_tencent_realtime_volume_ratio(symbol: str) -> dict:
@@ -530,6 +688,13 @@ def main() -> int:
         print("其他标的或日期请使用正式 facts pack 生成链路，不得混用当前冻结基准。")
         return EXIT_USAGE_ERROR
 
+    expected_output_sha256 = None
+    if args.output_json:
+        expected_output_sha256 = ofl.snapshot_official_sha(
+            Path(args.output_json),
+            lock_dir=(Path(args.lock_dir) if args.lock_dir else None),
+        )
+
     # 导入 akshare
     try:
         import akshare as ak
@@ -686,10 +851,17 @@ def main() -> int:
         print("注：腾讯实时量比仅作候选字段，仍需同花顺人工核对。")
 
     if args.output_json:
-        facts = build_facts_json(args, tencent_data, realtime_volume_ratio)
-        write_facts_json(args.output_json, facts)
+        _facts, final_sha256 = write_facts_json(
+            args.output_json,
+            args=args,
+            tencent_data=tencent_data,
+            realtime_volume_ratio=realtime_volume_ratio,
+            expected_sha256=expected_output_sha256,
+            lock_dir=args.lock_dir,
+        )
         print()
         print(f"facts JSON 已写入: {args.output_json}")
+        print(f"facts JSON sha256: {final_sha256}")
 
     return EXIT_OK
 

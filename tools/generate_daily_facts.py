@@ -23,6 +23,14 @@ from typing import Any, Callable, Iterable, Optional
 from urllib.parse import urlencode
 from urllib.request import ProxyHandler, Request, build_opener
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools import official_facts_lock as ofl
+from tools import validate_review_chain as vrc
+from tools import volume_ratio_evidence as vre
+
 
 SCHEMA_VERSION = "facts_pack_v0.2"
 UTC = timezone.utc
@@ -76,9 +84,9 @@ TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
 TENCENT_QUOTE_URL = "https://qt.gtimg.cn/q={code}"
 SOHU_HISTORY_URL = "https://q.stock.sohu.com/hisHq"
 HTTP_USER_AGENT = "Mozilla/5.0 (stocks-workbench facts generator)"
-VOLUME_RATIO_CONFIRM_TOLERANCE = 0.05
-HISTORICAL_VOLUME_RATIO_CONFIRM_TOLERANCE = 0.01
-OHLC_FIELDS = ("open", "high", "low", "close")
+VOLUME_RATIO_CONFIRM_TOLERANCE = vre.SAME_DAY_VOLUME_RATIO_TOLERANCE
+HISTORICAL_VOLUME_RATIO_CONFIRM_TOLERANCE = vre.HISTORICAL_VOLUME_RATIO_TOLERANCE
+OHLC_FIELDS = vre.OHLC_FIELDS
 
 
 @dataclass
@@ -88,6 +96,7 @@ class RunOutcome:
     wrote_file: bool
     output_path: str | None
     status: str
+    output_sha256: str | None = None
 
 
 class SourceTimeoutError(TimeoutError):
@@ -250,6 +259,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=15.0,
         help="Network timeout in seconds",
     )
+    parser.add_argument(
+        "--lock-dir",
+        help="Override the shared official-facts lock directory (tests only)",
+    )
     return parser.parse_args(argv)
 
 
@@ -258,13 +271,7 @@ def load_json(path: Path) -> dict[str, Any]:
         return json.load(handle)
 
 
-def load_existing_pack(output_path: Path, symbol: str, target_date: str) -> dict[str, Any] | None:
-    if not output_path.exists():
-        return None
-    try:
-        pack = load_json(output_path)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"schema_error: output JSON is invalid: {exc}") from exc
+def _validate_existing_pack(pack: Any, symbol: str, target_date: str) -> dict[str, Any]:
     if not isinstance(pack, dict):
         raise ValueError(
             f"schema_error: existing output root must be an object, got {type(pack).__name__}"
@@ -428,19 +435,14 @@ def _quote_values_match(
     right: dict[str, Any],
     *,
     fields: tuple[str, ...] = OHLC_FIELDS,
-    tolerance: float = 0.02,
+    tolerance: float = vre.OHLC_ABS_TOLERANCE,
 ) -> bool:
-    for field in fields:
-        if isinstance(left.get(field), bool) or isinstance(right.get(field), bool):
-            return False
-        left_value = to_float_or_none(left.get(field))
-        right_value = to_float_or_none(right.get(field))
-        if left_value is None or right_value is None:
-            return False
-        if not math.isfinite(left_value) or not math.isfinite(right_value):
-            return False
-        if abs(left_value - right_value) > tolerance:
-            return False
+    try:
+        left_ohlc = {field: left.get(field) for field in fields}
+        right_ohlc = {field: right.get(field) for field in fields}
+        vre.validate_ohlc_match(left_ohlc, right_ohlc, tolerance=tolerance)
+    except vre.EvidenceError:
+        return False
     return True
 
 
@@ -468,14 +470,32 @@ def _tencent_kline_records(payload: dict[str, Any], code: str) -> tuple[list[dic
 
 
 def derive_five_day_volume_ratio(records: list[dict[str, Any]], target_date: str) -> float | None:
-    dated_records = [
-        (record_date_text(row), row)
-        for row in records
-        if record_date_text(row) is not None
-    ]
-    if sum(1 for date_text, _row in dated_records if date_text == target_date) != 1:
+    window = _six_day_volume_window(records, target_date)
+    if window is None:
         return None
-    sorted_records = [row for _date_text, row in sorted(dated_records, key=lambda item: item[0] or "")]
+    try:
+        return vre.calculate_volume_ratio_from_window([item["volume"] for item in window])
+    except vre.EvidenceError:
+        return None
+
+
+def _six_day_volume_window(records: list[dict[str, Any]], target_date: str) -> list[dict[str, Any]] | None:
+    dated_records = []
+    try:
+        target = vre.parse_trade_date(target_date)
+    except vre.EvidenceError:
+        return None
+    for row in records:
+        date_text = record_date_text(row)
+        if date_text is None:
+            continue
+        try:
+            dated_records.append((vre.parse_trade_date(date_text), row))
+        except vre.EvidenceError:
+            continue
+    if sum(1 for date_value, _row in dated_records if date_value == target) != 1:
+        return None
+    sorted_records = [row for _date_text, row in sorted(dated_records, key=lambda item: item[0])]
     target_index = next(
         (index for index, row in enumerate(sorted_records) if record_date_text(row) == target_date),
         None,
@@ -488,19 +508,44 @@ def derive_five_day_volume_ratio(records: list[dict[str, Any]], target_date: str
     ]
     if any(date_text is None for date_text in window_dates):
         return None
-    if len(set(window_dates)) != len(window_dates):
+    volumes = [to_float_or_none(row.get("volume")) for row in sorted_records[target_index - 5 : target_index + 1]]
+    try:
+        vre.validate_six_day_window(window_dates, volumes, target_date=target_date)
+    except vre.EvidenceError:
         return None
-    current_volume = to_float_or_none(sorted_records[target_index].get("volume"))
-    prior_volumes = [
-        to_float_or_none(row.get("volume"))
-        for row in sorted_records[target_index - 5 : target_index]
+    return [
+        {
+            "date": date_text,
+            "volume": volume,
+        }
+        for date_text, volume in zip(window_dates, volumes)
     ]
-    if current_volume is None or any(value is None for value in prior_volumes):
+
+
+def _five_day_volume_check_from_records(
+    records: list[dict[str, Any]],
+    target_date: str,
+    *,
+    source: str,
+    expected_value: Any,
+    tolerance: float,
+    fetched_at: str | None = None,
+) -> dict[str, Any] | None:
+    window = _six_day_volume_window(records, target_date)
+    if window is None:
         return None
-    average_volume = sum(value for value in prior_volumes if value is not None) / 5
-    if not average_volume:
+    try:
+        return vre.build_five_day_volume_check(
+            source=source,
+            trade_dates=[row["date"] for row in window],
+            volumes=[row["volume"] for row in window],
+            target_date=target_date,
+            expected_value=expected_value,
+            tolerance=tolerance,
+            fetched_at=fetched_at,
+        )
+    except vre.EvidenceError:
         return None
-    return round(current_volume / average_volume, 2)
 
 
 def _quote_from_tencent_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -533,15 +578,35 @@ def _same_day_snapshot_ohlc_matched(
     )
 
 
-def _snapshot_ohlc_evidence(snapshot_source: str | None, target_date: str) -> dict[str, Any]:
-    return {
-        "status": "matched",
-        "fields": list(OHLC_FIELDS),
-        "snapshot_source": snapshot_source,
-        "matched_to": "tencent_fqkline",
-        "source_date": target_date,
-        "tolerance": 0.02,
-    }
+def _snapshot_ohlc_evidence(
+    *,
+    snapshot_source: str | None,
+    target_date: str,
+    snapshot: dict[str, Any],
+    historical_source: str,
+    historical_ohlc: dict[str, Any],
+    fetched_at: str | None = None,
+) -> dict[str, Any]:
+    evidence = vre.build_ohlc_check(
+        archived_source=snapshot_source or "unknown_tencent_snapshot",
+        archived_source_date=target_date,
+        archived_ohlc={field: snapshot.get(field) for field in OHLC_FIELDS},
+        historical_source=historical_source,
+        historical_source_date=target_date,
+        historical_ohlc=historical_ohlc,
+        tolerance=vre.OHLC_TOLERANCE,
+        fetched_at=fetched_at,
+    )
+    evidence.update(
+        {
+            "snapshot_source": snapshot_source,
+            "source_date": target_date,
+            "matched_to": historical_source,
+            "snapshot_ohlc": evidence["archived_ohlc"],
+            "historical_ohlc": evidence["ohlc"],
+        }
+    )
+    return evidence
 
 
 def fetch_sohu_quote(_client: Any, symbol: str, target_date: str, timeout: float) -> dict[str, Any]:
@@ -813,11 +878,35 @@ def fetch_volume_ratio_candidate(symbol: str, target_date: str, timeout: float) 
         snapshot = usable_snapshot
         snapshot_source = usable_snapshot_source
         snapshot_value = to_float_or_none(snapshot.get("volume_ratio"))
+        sohu_quote = sohu.get("quote") if isinstance(sohu.get("quote"), dict) else None
+        snapshot_ohlc_check = None
+        five_day_volume_check = None
+        if sohu.get("status") == "ok" and sohu_quote is not None:
+            try:
+                snapshot_ohlc_check = _snapshot_ohlc_evidence(
+                    snapshot_source=snapshot_source,
+                    target_date=target_date,
+                    snapshot=snapshot,
+                    historical_source=vre.SOHU_HISTORY_SOURCE,
+                    historical_ohlc=sohu_quote,
+                    fetched_at=sohu.get("fetched_at"),
+                )
+            except vre.EvidenceError:
+                snapshot_ohlc_check = None
+        if sohu_derived is not None:
+            five_day_volume_check = _five_day_volume_check_from_records(
+                sohu.get("rows") or [],
+                target_date,
+                source=vre.SOHU_HISTORY_SOURCE,
+                expected_value=snapshot_value,
+            tolerance=VOLUME_RATIO_CONFIRM_TOLERANCE,
+            fetched_at=sohu.get("fetched_at"),
+        )
         cross_check = {
             "value": sohu_derived,
             "source": "sohu_five_day_volume_derived" if sohu_derived is not None else None,
             "source_date": target_date if sohu_derived is not None else None,
-            "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+            "formula": vre.VOLUME_RATIO_FORMULA_ID,
             "tolerance": VOLUME_RATIO_CONFIRM_TOLERANCE,
             "delta": abs(snapshot_value - sohu_derived)
             if snapshot_value is not None and sohu_derived is not None
@@ -826,11 +915,13 @@ def fetch_volume_ratio_candidate(symbol: str, target_date: str, timeout: float) 
         auto_confirmed = (
             snapshot_value is not None
             and sohu_derived is not None
+            and snapshot_ohlc_check is not None
+            and five_day_volume_check is not None
             and cross_check["delta"] <= VOLUME_RATIO_CONFIRM_TOLERANCE
         )
         conflict = snapshot_value is not None and sohu_derived is not None and not auto_confirmed
         verification_status = "confirmed" if auto_confirmed else "conflict" if conflict else "candidate"
-        return {
+        result = {
             "candidate_value": snapshot_value,
             "source": (
                 f"{snapshot_source}+sohu_five_day_volume"
@@ -847,7 +938,6 @@ def fetch_volume_ratio_candidate(symbol: str, target_date: str, timeout: float) 
             "confirmed_by": "automation_cross_check" if auto_confirmed else "none",
             "verification_status": verification_status,
             "cross_check": cross_check,
-            "snapshot_ohlc_check": _snapshot_ohlc_evidence(snapshot_source, target_date),
             "notes": (
                 "same-day Tencent close snapshot confirmed by Sohu five-day volume calculation"
                 if auto_confirmed
@@ -858,10 +948,31 @@ def fetch_volume_ratio_candidate(symbol: str, target_date: str, timeout: float) 
             "error_type": None,
             "error_message": None,
         }
+        if snapshot_ohlc_check is not None:
+            result["snapshot_ohlc_check"] = snapshot_ohlc_check
+        if five_day_volume_check is not None:
+            result["five_day_volume_check"] = five_day_volume_check
+        return result
 
     if sohu_derived is not None and tencent_derived is not None:
         delta = abs(sohu_derived - tencent_derived)
         auto_confirmed = delta <= HISTORICAL_VOLUME_RATIO_CONFIRM_TOLERANCE
+        sohu_five_day_check = _five_day_volume_check_from_records(
+            sohu.get("rows") or [],
+            target_date,
+            source=vre.SOHU_HISTORY_SOURCE,
+            expected_value=sohu_derived,
+            tolerance=HISTORICAL_VOLUME_RATIO_CONFIRM_TOLERANCE,
+            fetched_at=sohu.get("fetched_at"),
+        )
+        tencent_five_day_check = _five_day_volume_check_from_records(
+            records if "records" in locals() else [],
+            target_date,
+            source=vre.TENCENT_HISTORY_SOURCE,
+            expected_value=tencent_derived,
+            tolerance=HISTORICAL_VOLUME_RATIO_CONFIRM_TOLERANCE,
+            fetched_at=fetched_at,
+        )
         return {
             "candidate_value": sohu_derived,
             "source": "sohu_five_day_volume+tencent_five_day_volume",
@@ -874,10 +985,21 @@ def fetch_volume_ratio_candidate(symbol: str, target_date: str, timeout: float) 
                 "value": tencent_derived,
                 "source": "tencent_five_day_volume_derived",
                 "source_date": target_date,
-                "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+                "formula": vre.VOLUME_RATIO_FORMULA_ID,
                 "tolerance": HISTORICAL_VOLUME_RATIO_CONFIRM_TOLERANCE,
                 "delta": delta,
             },
+            **(
+                {
+                    "source_volume_checks": {
+                        "sohu_history": sohu_five_day_check,
+                        "tencent_history": tencent_five_day_check,
+                    }
+                }
+                if sohu_five_day_check is not None and tencent_five_day_check is not None
+                else {}
+            ),
+            **({"five_day_volume_check": tencent_five_day_check} if tencent_five_day_check is not None else {}),
             "notes": (
                 "historical volume ratio confirmed from Sohu and Tencent daily volume; "
                 "amount-based ratios are not accepted"
@@ -1246,6 +1368,10 @@ def build_volume_ratio_block(
                 merged["cross_check"] = copy.deepcopy(candidate["cross_check"])
             if isinstance(candidate.get("snapshot_ohlc_check"), dict):
                 merged["snapshot_ohlc_check"] = copy.deepcopy(candidate["snapshot_ohlc_check"])
+            if isinstance(candidate.get("five_day_volume_check"), dict):
+                merged["five_day_volume_check"] = copy.deepcopy(candidate["five_day_volume_check"])
+            if isinstance(candidate.get("source_volume_checks"), dict):
+                merged["source_volume_checks"] = copy.deepcopy(candidate["source_volume_checks"])
             merged["verification"].update(
                 {
                     "status": candidate_status,
@@ -1529,38 +1655,180 @@ def _has_any_core_field(quote: dict[str, Any]) -> bool:
     return any(quote.get(field) is not None for field in CORE_QUOTE_FIELDS)
 
 
-def atomic_write_json(output_path: Path, payload: dict[str, Any]) -> None:
+def json_bytes(payload: dict[str, Any]) -> bytes:
+    return (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+
+
+def parse_existing_official_bytes(
+    data: bytes | None,
+    *,
+    symbol: str,
+    target_date: str,
+) -> dict[str, Any] | None:
+    if data is None:
+        return None
+    try:
+        pack = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"schema_error: output JSON is invalid: {exc}") from exc
+    return _validate_existing_pack(pack, symbol, target_date)
+
+
+def snapshot_expected_official_sha(
+    output_path: Path,
+    *,
+    symbol: str,
+    target_date: str,
+    lock_dir: Path | None,
+) -> str | None:
+    """Take a short locked pre-fetch snapshot without retaining parsed state."""
+
+    with ofl.official_facts_lock(output_path, lock_dir=lock_dir) as lock_state:
+        official_bytes, expected_sha256 = ofl.read_current_official(
+            output_path,
+            lock_state=lock_state,
+        )
+        parse_existing_official_bytes(
+            official_bytes,
+            symbol=symbol,
+            target_date=target_date,
+        )
+        return expected_sha256
+
+
+def validate_generated_facts_pack(
+    facts_pack: dict[str, Any],
+    *,
+    output_path: Path,
+    target_date: str,
+) -> None:
+    """Run the real review-chain facts rules before a formal generator write."""
+
+    vrc.assert_facts_pack_valid(
+        facts_pack,
+        facts_pack_path=str(output_path),
+        date=target_date,
+    )
+
+
+def _write_generated_bytes_locked(
+    output_path: Path,
+    payload_bytes: bytes,
+    *,
+    expected_sha256: str | None,
+    lock_state: ofl.OfficialFactsLockState,
+) -> str:
+    """Write, replace, sync, and fingerprint generator output under one lock."""
+
+    lock_state.assert_held_for(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_file = None
+    tmp_file: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            "w",
-            encoding="utf-8",
+            "wb",
             dir=str(output_path.parent),
             prefix=f".{output_path.name}.",
             suffix=".tmp",
             delete=False,
         ) as handle:
             tmp_file = Path(handle.name)
-            json.dump(payload, handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
+            handle.write(payload_bytes)
             handle.flush()
             os.fsync(handle.fileno())
+        ofl.read_locked_official(
+            output_path,
+            expected_sha256=expected_sha256,
+            lock_state=lock_state,
+        )
         os.replace(tmp_file, output_path)
         try:
             dir_fd = os.open(str(output_path.parent), os.O_DIRECTORY)
         except OSError:
-            return
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
-    finally:
-        if tmp_file is not None and tmp_file.exists():
+            dir_fd = None
+        if dir_fd is not None:
             try:
-                tmp_file.unlink()
-            except FileNotFoundError:
-                pass
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        final_bytes, final_sha256 = ofl.read_current_official(
+            output_path,
+            lock_state=lock_state,
+        )
+        if final_bytes != payload_bytes or final_sha256 is None:
+            raise RuntimeError("written official facts do not match generator bytes")
+        return final_sha256
+    finally:
+        if tmp_file is not None:
+            tmp_file.unlink(missing_ok=True)
+
+
+def write_generated_facts_transaction(
+    *,
+    args: argparse.Namespace,
+    output_path: Path,
+    quote_result: dict[str, Any],
+    volume_ratio_candidate: dict[str, Any] | None,
+    expected_sha256: str | None,
+    lock_dir: Path | None,
+) -> tuple[dict[str, Any], str, bool, str | None]:
+    """Build, validate, and write final generator facts under one held lock."""
+
+    with ofl.official_facts_lock(output_path, lock_dir=lock_dir) as lock_state:
+        official_bytes, _actual_sha256 = ofl.read_locked_official(
+            output_path,
+            expected_sha256=expected_sha256,
+            lock_state=lock_state,
+        )
+        existing_pack = parse_existing_official_bytes(
+            official_bytes,
+            symbol=args.symbol,
+            target_date=args.date,
+        )
+        facts_pack = build_facts_pack(
+            args=args,
+            quote_result=quote_result,
+            existing_pack=existing_pack,
+            volume_ratio_candidate=volume_ratio_candidate,
+        )
+        run_status = compute_final_run_status(facts_pack)
+        facts_pack["run"]["status"] = run_status
+
+        quote_complete = all(
+            facts_pack["quote"].get(field) is not None
+            for field in (
+                "open",
+                "high",
+                "low",
+                "close",
+                "prev_close",
+                "amount",
+                "turnover_rate",
+            )
+        )
+        should_write = True
+        if args.dry_run or args.no_write:
+            should_write = False
+        elif run_status in {"network_error", "source_error", "schema_error", "date_mismatch"}:
+            should_write = False
+        elif not quote_complete and not args.write_partial:
+            should_write = False
+        elif not _has_any_core_field(facts_pack["quote"]):
+            should_write = False
+
+        final_sha256 = None
+        if should_write:
+            validate_generated_facts_pack(
+                facts_pack,
+                output_path=output_path,
+                target_date=args.date,
+            )
+            final_sha256 = _write_generated_bytes_locked(
+                output_path,
+                json_bytes(facts_pack),
+                expected_sha256=expected_sha256,
+                lock_state=lock_state,
+            )
+        return facts_pack, run_status, should_write, final_sha256
 
 
 def _load_akshare_client() -> Any:
@@ -1711,20 +1979,24 @@ def run(
             output_path=str(output_path),
             status="schema_error",
         )
-    existing_pack: dict[str, Any] | None = None
-    if output_path.exists():
-        try:
-            existing_pack = load_existing_pack(output_path, args.symbol, args.date)
-        except ValueError as exc:
-            message = str(exc)
-            status = "schema_error" if message.startswith("schema_error") else "date_mismatch"
-            return RunOutcome(
-                exit_code=_runtime_error_code(status),
-                facts_pack=None,
-                wrote_file=False,
-                output_path=str(output_path),
-                status=status,
-            )
+    lock_dir = Path(args.lock_dir) if getattr(args, "lock_dir", None) else None
+    try:
+        expected_output_sha256 = snapshot_expected_official_sha(
+            output_path,
+            symbol=args.symbol,
+            target_date=args.date,
+            lock_dir=lock_dir,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        status = "schema_error" if message.startswith("schema_error") else "date_mismatch"
+        return RunOutcome(
+            exit_code=_runtime_error_code(status),
+            facts_pack=None,
+            wrote_file=False,
+            output_path=str(output_path),
+            status=status,
+        )
 
     client = ak_client
     quote_result, errors, fatal_status = _attempt_fetch_chain(
@@ -1756,29 +2028,28 @@ def run(
             status="date_mismatch",
         )
 
-    volume_ratio_candidate = volume_ratio_candidate_provider(args.symbol, args.date, args.timeout) if volume_ratio_candidate_provider else None
-    facts_pack = build_facts_pack(
-        args=args,
-        quote_result=quote_result,
-        existing_pack=existing_pack,
-        volume_ratio_candidate=volume_ratio_candidate,
+    volume_ratio_candidate = (
+        volume_ratio_candidate_provider(args.symbol, args.date, args.timeout)
+        if volume_ratio_candidate_provider
+        else None
     )
-    run_status = compute_final_run_status(facts_pack)
-    facts_pack["run"]["status"] = run_status
-
-    quote_complete = all(facts_pack["quote"].get(field) is not None for field in ("open", "high", "low", "close", "prev_close", "amount", "turnover_rate"))
-    should_write = True
-    if args.dry_run or args.no_write:
-        should_write = False
-    elif run_status in {"network_error", "source_error", "schema_error", "date_mismatch"}:
-        should_write = False
-    elif not quote_complete and not args.write_partial:
-        should_write = False
-    elif not _has_any_core_field(facts_pack["quote"]):
-        should_write = False
-
-    if should_write:
-        atomic_write_json(output_path, facts_pack)
+    try:
+        facts_pack, run_status, should_write, output_sha256 = write_generated_facts_transaction(
+            args=args,
+            output_path=output_path,
+            quote_result=quote_result,
+            volume_ratio_candidate=volume_ratio_candidate,
+            expected_sha256=expected_output_sha256,
+            lock_dir=lock_dir,
+        )
+    except (ofl.OfficialFactsChangedError, ValueError):
+        return RunOutcome(
+            exit_code=EXIT_SCHEMA_ERROR,
+            facts_pack=None,
+            wrote_file=False,
+            output_path=None,
+            status="schema_error",
+        )
 
     exit_code = _runtime_error_code(run_status)
     if run_status == "success":
@@ -1792,6 +2063,7 @@ def run(
         wrote_file=should_write,
         output_path=str(output_path) if should_write else None,
         status=run_status,
+        output_sha256=output_sha256,
     )
 
 
@@ -1821,6 +2093,7 @@ def main(argv: list[str] | None = None) -> int:
                     "source_used": outcome.facts_pack.get("run", {}).get("source_used") if outcome.facts_pack else None,
                     "output": outcome.output_path,
                     "wrote_file": outcome.wrote_file,
+                    "output_sha256": outcome.output_sha256,
                 },
                 ensure_ascii=False,
             )

@@ -19,8 +19,15 @@
     "confirmed_value": 1.79,
     "verification": {
       "status": "manual_confirmed",
+      "method": "legacy_manual_confirmation",
       "confirmed_by": "user_manual_check",
       "notes": "manually confirmed"
+    },
+    "manual_verification": {
+      "decided_by": "test_fixture",
+      "decided_at": "2026-07-10T16:00:00Z",
+      "source": "frozen test fixture",
+      "reason": "manual fixture value"
     },
     "source": "manual_check"
   },

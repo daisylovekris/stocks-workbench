@@ -27,12 +27,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence
+from typing import Any, Iterable, List, Optional, Sequence
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools import volume_ratio_evidence as vre
 
 
 CURRENT_HEADING_KEYWORDS = [
@@ -255,6 +263,11 @@ RULE_REGISTRY = {
         "severity_default": "P2",
         "notes": "Flag stale workflow ledger text such as 后续待同步 in current sections.",
     },
+    "R009_VOLUME_RATIO_EVIDENCE_CONSISTENCY": {
+        "enabled": True,
+        "severity_default": "P2",
+        "notes": "Require volume-ratio verification method and evidence structure to agree.",
+    },
 }
 
 
@@ -451,6 +464,779 @@ def _facts_needs_manual_check(facts_pack: Optional[dict]) -> bool:
     if missing is not None:
         return _is_truthy_manual_check_value(missing)
     return not has_relevant_signal
+
+
+def _is_finite_number(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(numeric)
+
+
+def _finite_equal(left: Any, right: Any, tolerance: Any) -> bool:
+    if not (_is_finite_number(left) and _is_finite_number(right) and _is_finite_number(tolerance)):
+        return False
+    return abs(float(left) - float(right)) <= float(tolerance)
+
+
+def _has_finite_ohlc(mapping: Any) -> bool:
+    return isinstance(mapping, dict) and all(_is_finite_number(mapping.get(field)) for field in ("open", "high", "low", "close"))
+
+
+def _volume_ratio_confirmed_value(volume_ratio: dict[str, Any]) -> Any:
+    if volume_ratio.get("confirmed_value") is not None:
+        return volume_ratio.get("confirmed_value")
+    return volume_ratio.get("candidate_value")
+
+
+def _volume_ratio_status(volume_ratio: dict[str, Any]) -> Optional[str]:
+    verification = volume_ratio.get("verification")
+    return verification.get("status") if isinstance(verification, dict) else None
+
+
+def _volume_ratio_method(volume_ratio: dict[str, Any]) -> Any:
+    verification = volume_ratio.get("verification")
+    return verification.get("method") if isinstance(verification, dict) else None
+
+
+def _metadata_tolerance_error(value: Any, expected: float, *, field: str) -> Optional[str]:
+    try:
+        vre.validate_tolerance_metadata(value, expected, field=field)
+    except vre.EvidenceError as exc:
+        return str(exc)
+    return None
+
+
+def _formula_error(value: Any, *, field: str) -> Optional[str]:
+    try:
+        vre.validate_formula(value, field=field)
+    except vre.EvidenceError as exc:
+        return str(exc)
+    return None
+
+
+def _date_error(value: Any, *, field: str) -> Optional[str]:
+    try:
+        vre.parse_trade_date(value)
+    except vre.EvidenceError as exc:
+        return f"{field}: {exc}"
+    return None
+
+
+def _exact_ohlc_equal(left: Any, right: Any) -> bool:
+    try:
+        left_ohlc = vre.normalize_ohlc(left, prefix="left")
+        right_ohlc = vre.normalize_ohlc(right, prefix="right")
+    except vre.EvidenceError:
+        return False
+    return all(left_ohlc[field] == right_ohlc[field] for field in vre.OHLC_FIELDS)
+
+
+def _volume_ratio_facts_finding(
+    *,
+    facts_pack_path: str,
+    target_date: Optional[str],
+    matched_text: str,
+    reason: str,
+    suggested_fix: str,
+) -> Finding:
+    return Finding(
+        file=facts_pack_path,
+        line=1,
+        section="facts_pack.volume_ratio",
+        rule_id="R009_VOLUME_RATIO_EVIDENCE_CONSISTENCY",
+        severity="P2",
+        disposition="needs_human_review",
+        matched_text=matched_text,
+        reason=f"{reason}" + (f" (target_date={target_date})" if target_date else ""),
+        suggested_fix=suggested_fix,
+    )
+
+
+def _check_same_day_snapshot_volume_ratio_evidence(
+    *,
+    facts_pack: dict[str, Any],
+    facts_pack_path: str,
+    target_date: Optional[str],
+    volume_ratio: dict[str, Any],
+) -> List[Finding]:
+    findings: List[Finding] = []
+    method = vre.METHOD_SAME_DAY_SNAPSHOT
+    suggested_fix = (
+        "Regenerate with same-day snapshot OHLC evidence, or migrate legacy facts to "
+        "archived_tencent_snapshot_plus_sohu_historical_reverification with complete historical evidence."
+    )
+
+    def fail(reason: str) -> None:
+        findings.append(
+            _volume_ratio_facts_finding(
+                facts_pack_path=facts_pack_path,
+                target_date=target_date,
+                matched_text=method,
+                reason=reason,
+                suggested_fix=suggested_fix,
+            )
+        )
+
+    evidence = volume_ratio.get("snapshot_ohlc_check")
+    if not isinstance(evidence, dict):
+        fail("same-day snapshot method is missing snapshot_ohlc_check")
+        return findings
+
+    if evidence.get("status") not in {"matched", "passed"}:
+        fail("snapshot_ohlc_check status is not a passing status")
+    evidence_source_date = evidence.get("source_date") or evidence.get("archived_source_date")
+    historical_source_date = evidence.get("historical_source_date")
+    if target_date and evidence_source_date != target_date:
+        fail("snapshot_ohlc_check source_date does not match target trade date")
+    for field, value in (("snapshot_ohlc_check.source_date", evidence_source_date), ("snapshot_ohlc_check.historical_source_date", historical_source_date)):
+        error = _date_error(value, field=field)
+        if error:
+            fail(error)
+    if target_date and historical_source_date != target_date:
+        fail("snapshot_ohlc_check historical_source_date does not match target trade date")
+    if not evidence.get("snapshot_source") and not evidence.get("archived_source"):
+        fail("snapshot_ohlc_check is missing snapshot_source")
+    if (evidence.get("matched_to") or evidence.get("historical_source")) != vre.SOHU_HISTORY_SOURCE:
+        fail("snapshot_ohlc_check is missing matched_to comparison source")
+    tolerance_error = _metadata_tolerance_error(
+        evidence.get("tolerance"),
+        vre.OHLC_ABS_TOLERANCE,
+        field="snapshot_ohlc_check.tolerance",
+    )
+    if tolerance_error:
+        fail(tolerance_error)
+    fields = evidence.get("fields") or evidence.get("compared_fields")
+    if not isinstance(fields, list) or set(fields) != {"open", "high", "low", "close"}:
+        fail("snapshot_ohlc_check fields must include complete OHLC fields")
+
+    snapshot_ohlc = evidence.get("snapshot_ohlc") or evidence.get("archived_ohlc")
+    matched_ohlc = evidence.get("matched_ohlc") or evidence.get("historical_ohlc") or evidence.get("target_ohlc") or evidence.get("ohlc")
+    try:
+        vre.validate_ohlc_match(
+            snapshot_ohlc,
+            matched_ohlc,
+            tolerance=vre.OHLC_ABS_TOLERANCE,
+            left_label="snapshot_ohlc",
+            right_label="historical_ohlc",
+        )
+    except vre.EvidenceError as exc:
+        fail(str(exc))
+
+    five_day = volume_ratio.get("five_day_volume_check")
+    five_day_result: dict[str, Any] | None = None
+    if not isinstance(five_day, dict):
+        fail("same-day snapshot method is missing complete five-day volume evidence")
+    else:
+        if five_day.get("status") != "passed":
+            fail("five-day volume evidence status is not passed")
+        if five_day.get("source") != vre.SOHU_HISTORY_SOURCE:
+            fail("five-day volume evidence source must be sohu_history")
+        try:
+            five_day_result = vre.validate_recalculated_volume_ratio(
+                trade_dates=five_day.get("trade_dates"),
+                volumes=five_day.get("volumes"),
+                target_date=target_date or "",
+                calculated_value=five_day.get("calculated_value"),
+                expected_value=five_day.get("expected_value", _volume_ratio_confirmed_value(volume_ratio)),
+                confirmed_value=_volume_ratio_confirmed_value(volume_ratio),
+                tolerance=five_day.get("tolerance"),
+                authoritative_tolerance=vre.SAME_DAY_VOLUME_RATIO_ABS_TOLERANCE,
+                formula=five_day.get("formula"),
+            )
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+
+    cross_check = volume_ratio.get("cross_check")
+    if not isinstance(cross_check, dict):
+        fail("same-day snapshot method is missing five-day volume cross_check")
+    else:
+        if cross_check.get("source") != "sohu_five_day_volume_derived":
+            fail("five-day volume cross_check source must be sohu_five_day_volume_derived")
+        if target_date and cross_check.get("source_date") != target_date:
+            fail("five-day volume cross_check source_date does not match target trade date")
+        date_error = _date_error(cross_check.get("source_date"), field="cross_check.source_date")
+        if date_error:
+            fail(date_error)
+        tolerance_error = _metadata_tolerance_error(
+            cross_check.get("tolerance"),
+            vre.SAME_DAY_VOLUME_RATIO_ABS_TOLERANCE,
+            field="cross_check.tolerance",
+        )
+        if tolerance_error:
+            fail(tolerance_error)
+        formula_error = _formula_error(cross_check.get("formula"), field="cross_check.formula")
+        if formula_error:
+            fail(formula_error)
+        try:
+            cross_value = vre.finite_float(cross_check.get("value"), field="cross_check.value")
+            cross_delta = vre.finite_float(cross_check.get("delta"), field="cross_check.delta")
+            confirmed_value = vre.finite_float(_volume_ratio_confirmed_value(volume_ratio), field="volume_ratio.confirmed_value")
+            if five_day_result is not None and abs(cross_value - five_day_result["calculated_value"]) > vre.SAME_DAY_VOLUME_RATIO_ABS_TOLERANCE:
+                fail("cross_check.value does not match recomputed five-day volume ratio")
+            expected_delta = abs(cross_value - confirmed_value)
+            if abs(cross_delta - expected_delta) > vre.SAME_DAY_VOLUME_RATIO_ABS_TOLERANCE:
+                fail("cross_check.delta does not match recomputed delta")
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+
+    return findings
+
+
+def _check_archived_volume_ratio_evidence(
+    *,
+    facts_pack: dict[str, Any],
+    facts_pack_path: str,
+    target_date: Optional[str],
+    volume_ratio: dict[str, Any],
+    migration_base_facts: Optional[dict[str, Any]] = None,
+) -> List[Finding]:
+    findings: List[Finding] = []
+    method = vre.METHOD_ARCHIVED_REVERIFICATION
+    suggested_fix = "Rebuild the migration candidate with archived snapshot, historical OHLC, five-day volume, and migration metadata."
+    confirmed_value = _volume_ratio_confirmed_value(volume_ratio)
+    verification = volume_ratio.get("verification")
+
+    def fail(reason: str) -> None:
+        findings.append(
+            _volume_ratio_facts_finding(
+                facts_pack_path=facts_pack_path,
+                target_date=target_date,
+                matched_text=method,
+                reason=reason,
+                suggested_fix=suggested_fix,
+            )
+        )
+
+    if volume_ratio.get("source") != vre.ARCHIVED_COMPOSITE_SOURCE:
+        fail(f"volume_ratio.source must be {vre.ARCHIVED_COMPOSITE_SOURCE}")
+    if not isinstance(verification, dict):
+        fail("archived reverification method is missing verification")
+    else:
+        expected_verification = {
+            "status": "confirmed",
+            "method": method,
+            "source": vre.ARCHIVED_COMPOSITE_SOURCE,
+            "source_date": target_date,
+        }
+        for field, expected_value in expected_verification.items():
+            if verification.get(field) != expected_value:
+                fail(f"verification.{field} must equal {expected_value}")
+
+    legacy = volume_ratio.get("legacy_verification")
+    if not isinstance(legacy, dict):
+        fail("archived reverification method is missing legacy_verification")
+    else:
+        if legacy.get("status") != "confirmed":
+            fail("legacy_verification.status must be confirmed")
+        if legacy.get("method") != vre.METHOD_SAME_DAY_SNAPSHOT:
+            fail("legacy_verification.method must identify the original same-day method")
+        if legacy.get("source") != vre.LEGACY_SNAPSHOT_COMPOSITE_SOURCE:
+            fail("legacy_verification.source must identify the original source")
+        if target_date and legacy.get("source_date") != target_date:
+            fail("legacy_verification.source_date does not match target trade date")
+        try:
+            vre.parse_timezone_datetime(
+                legacy.get("fetched_at"),
+                field="legacy_verification.fetched_at",
+            )
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+        if migration_base_facts is not None:
+            base_volume_ratio = migration_base_facts.get("volume_ratio")
+            base_verification = (
+                base_volume_ratio.get("verification")
+                if isinstance(base_volume_ratio, dict)
+                else None
+            )
+            if legacy != base_verification:
+                fail("legacy_verification must exactly equal the locked official verification")
+
+    archived = volume_ratio.get("archived_snapshot_source")
+    archived_ohlc: Any = None
+    archived_volume_ratio: float | None = None
+    if not isinstance(archived, dict):
+        fail("archived reverification method is missing archived_snapshot_source")
+    else:
+        if archived.get("source") != vre.TENCENT_ARCHIVED_SNAPSHOT_SOURCE:
+            fail("archived_snapshot_source must identify the original Tencent qt snapshot source")
+        if target_date and archived.get("source_date") != target_date:
+            fail("archived_snapshot_source source_date does not match target trade date")
+        date_error = _date_error(archived.get("source_date"), field="archived_snapshot_source.source_date")
+        if date_error:
+            fail(date_error)
+        archived_ohlc = archived.get("ohlc")
+        if not _has_finite_ohlc(archived_ohlc):
+            fail("archived_snapshot_source ohlc must contain finite OHLC values")
+        try:
+            archived_volume_ratio = vre.positive_float(archived.get("volume_ratio"), field="archived_snapshot_source.volume_ratio")
+            candidate_value = vre.finite_float(volume_ratio.get("candidate_value"), field="volume_ratio.candidate_value")
+            confirmed_float = vre.finite_float(confirmed_value, field="volume_ratio.confirmed_value")
+            if abs(archived_volume_ratio - candidate_value) > vre.ARCHIVED_VOLUME_RATIO_ABS_TOLERANCE:
+                fail("archived_snapshot_source.volume_ratio does not match candidate_value")
+            if abs(archived_volume_ratio - confirmed_float) > vre.ARCHIVED_VOLUME_RATIO_ABS_TOLERANCE:
+                fail("archived_snapshot_source.volume_ratio does not match confirmed_value")
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+        try:
+            vre.parse_timezone_datetime(
+                archived.get("original_fetched_at"),
+                field="archived_snapshot_source.original_fetched_at",
+            )
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+        if isinstance(legacy, dict) and archived.get("original_fetched_at") != legacy.get("fetched_at"):
+            fail("archived_snapshot_source.original_fetched_at must equal legacy_verification.fetched_at")
+        if archived.get("source_pack_paths") != list(vre.CANONICAL_ARCHIVED_SOURCE_PACK_PATHS):
+            fail("archived_snapshot_source.source_pack_paths must equal the canonical path list")
+
+        quote = facts_pack.get("quote")
+        if not isinstance(quote, dict):
+            fail("facts quote is missing for archived snapshot binding")
+        else:
+            expected_fields = {
+                "previous_close": quote.get("prev_close"),
+                "pct_change": quote.get("pct_change"),
+                "amount": quote.get("amount"),
+                "turnover_rate": quote.get("turnover_rate"),
+            }
+            if not _exact_ohlc_equal(archived_ohlc, quote):
+                fail("archived_snapshot_source.ohlc must equal the formal quote OHLC")
+            for field, expected_value in expected_fields.items():
+                try:
+                    actual = vre.finite_float(
+                        archived.get(field),
+                        field=f"archived_snapshot_source.{field}",
+                    )
+                    expected_numeric = vre.finite_float(
+                        expected_value,
+                        field=f"quote.{field}",
+                    )
+                    if actual != expected_numeric:
+                        fail(f"archived_snapshot_source.{field} must equal the formal quote value")
+                except vre.EvidenceError as exc:
+                    fail(str(exc))
+
+    historical = volume_ratio.get("historical_ohlc_check")
+    if not isinstance(historical, dict):
+        fail("archived reverification method is missing historical_ohlc_check")
+    else:
+        if historical.get("status") not in {"passed", "matched"}:
+            fail("historical_ohlc_check status is not passing")
+        historical_source = historical.get("source") or historical.get("historical_source")
+        if historical_source != vre.SOHU_HISTORY_SOURCE:
+            fail("historical_ohlc_check source must be sohu_history")
+        historical_source_date = historical.get("source_date") or historical.get("historical_source_date")
+        if target_date and historical_source_date != target_date:
+            fail("historical_ohlc_check source_date does not match target trade date")
+        date_error = _date_error(historical_source_date, field="historical_ohlc_check.source_date")
+        if date_error:
+            fail(date_error)
+        tolerance_error = _metadata_tolerance_error(
+            historical.get("tolerance"),
+            vre.OHLC_ABS_TOLERANCE,
+            field="historical_ohlc_check.tolerance",
+        )
+        if tolerance_error:
+            fail(tolerance_error)
+        historical_ohlc = historical.get("ohlc") or historical.get("historical_ohlc")
+        redundant_archived_ohlc = historical.get("archived_ohlc")
+        if redundant_archived_ohlc is not None and not _exact_ohlc_equal(redundant_archived_ohlc, archived_ohlc):
+            fail("historical_ohlc_check.archived_ohlc conflicts with archived_snapshot_source.ohlc")
+        try:
+            vre.validate_ohlc_match(
+                archived_ohlc,
+                historical_ohlc,
+                tolerance=vre.OHLC_ABS_TOLERANCE,
+                left_label="archived_snapshot_source.ohlc",
+                right_label="historical_ohlc_check.ohlc",
+            )
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+        try:
+            historical_fetched_at = historical.get("fetched_at")
+            vre.parse_timezone_datetime(
+                historical_fetched_at,
+                field="historical_ohlc_check.fetched_at",
+            )
+            expected_historical = vre.build_ohlc_check(
+                archived_source=vre.TENCENT_ARCHIVED_SNAPSHOT_SOURCE,
+                archived_source_date=target_date or "",
+                archived_ohlc=archived_ohlc,
+                historical_source=vre.SOHU_HISTORY_SOURCE,
+                historical_source_date=target_date or "",
+                historical_ohlc=historical_ohlc,
+                tolerance=vre.OHLC_ABS_TOLERANCE,
+                fetched_at=historical_fetched_at,
+            )
+            expected_historical["source"] = vre.SOHU_HISTORY_SOURCE
+            expected_historical["source_date"] = target_date
+            if historical != expected_historical:
+                fail("historical_ohlc_check must equal the canonical recomputed object")
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+
+    five_day = volume_ratio.get("five_day_volume_check")
+    five_day_result: dict[str, Any] | None = None
+    if not isinstance(five_day, dict):
+        fail("archived reverification method is missing five_day_volume_check")
+    else:
+        if five_day.get("status") != "passed":
+            fail("five_day_volume_check status is not passed")
+        if five_day.get("source") != vre.SOHU_HISTORY_SOURCE:
+            fail("five_day_volume_check source must be sohu_history")
+        try:
+            five_day_result = vre.validate_recalculated_volume_ratio(
+                trade_dates=five_day.get("trade_dates"),
+                volumes=five_day.get("volumes"),
+                target_date=target_date or "",
+                calculated_value=five_day.get("calculated_value"),
+                expected_value=five_day.get("expected_value", confirmed_value),
+                confirmed_value=confirmed_value,
+                tolerance=five_day.get("tolerance"),
+                authoritative_tolerance=vre.ARCHIVED_VOLUME_RATIO_ABS_TOLERANCE,
+                formula=five_day.get("formula"),
+            )
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+        try:
+            five_day_fetched_at = five_day.get("fetched_at")
+            vre.parse_timezone_datetime(
+                five_day_fetched_at,
+                field="five_day_volume_check.fetched_at",
+            )
+            expected_five_day = vre.build_five_day_volume_check(
+                source=vre.SOHU_HISTORY_SOURCE,
+                trade_dates=five_day.get("trade_dates"),
+                volumes=five_day.get("volumes"),
+                target_date=target_date or "",
+                expected_value=confirmed_value,
+                tolerance=vre.ARCHIVED_VOLUME_RATIO_ABS_TOLERANCE,
+                fetched_at=five_day_fetched_at,
+            )
+            if five_day != expected_five_day:
+                fail("five_day_volume_check must equal the canonical recomputed object")
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+        if archived_volume_ratio is not None and five_day_result is not None:
+            if abs(archived_volume_ratio - five_day_result["calculated_value"]) > vre.ARCHIVED_VOLUME_RATIO_ABS_TOLERANCE:
+                fail("archived_snapshot_source.volume_ratio does not match recomputed volume_ratio")
+
+    cross_check = volume_ratio.get("cross_check")
+    if five_day_result is None:
+        if not isinstance(cross_check, dict):
+            fail("archived reverification method is missing canonical cross_check")
+    else:
+        try:
+            vre.validate_cross_check(
+                cross_check,
+                expected_value=five_day_result["calculated_value"],
+                confirmed_value=confirmed_value,
+                source=vre.SOHU_DERIVED_CROSS_CHECK_SOURCE,
+                source_date=target_date or "",
+                tolerance=vre.ARCHIVED_CROSS_CHECK_TOLERANCE,
+            )
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+
+    migration = volume_ratio.get("migration")
+    if not isinstance(migration, dict):
+        fail("archived reverification method is missing migration metadata")
+    else:
+        if not migration.get("old_file_sha256"):
+            fail("migration metadata is missing old_file_sha256")
+        if not migration.get("migrated_at"):
+            fail("migration metadata is missing migrated_at")
+        if not migration.get("tool_version"):
+            fail("migration metadata is missing tool_version")
+        if migration.get("tool") != "tools/migrate_legacy_volume_ratio_evidence.py":
+            fail("migration.tool is not canonical")
+        if migration.get("migration_type") != "legacy_archived_tencent_snapshot_reverification":
+            fail("migration.migration_type is not canonical")
+        try:
+            vre.parse_timezone_datetime(
+                migration.get("migrated_at"),
+                field="migration.migrated_at",
+            )
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+        if isinstance(archived, dict) and archived.get("original_fetched_at") and migration.get("migrated_at") == archived.get("original_fetched_at"):
+            fail("migration migrated_at must not be the original snapshot fetched_at")
+
+    return findings
+
+
+def _check_historical_volume_ratio_evidence(
+    *,
+    facts_pack_path: str,
+    target_date: Optional[str],
+    volume_ratio: dict[str, Any],
+) -> List[Finding]:
+    findings: List[Finding] = []
+    method = vre.METHOD_HISTORICAL_FIVE_DAY
+    suggested_fix = "Regenerate historical evidence with complete Sohu and Tencent six-day volume windows."
+
+    def fail(reason: str) -> None:
+        findings.append(
+            _volume_ratio_facts_finding(
+                facts_pack_path=facts_pack_path,
+                target_date=target_date,
+                matched_text=method,
+                reason=reason,
+                suggested_fix=suggested_fix,
+            )
+        )
+
+    confirmed_value = _volume_ratio_confirmed_value(volume_ratio)
+    checks = volume_ratio.get("source_volume_checks")
+    if not isinstance(checks, dict):
+        fail("historical method is missing source_volume_checks")
+        return findings
+    required = {
+        "sohu_history": vre.SOHU_HISTORY_SOURCE,
+        "tencent_history": vre.TENCENT_HISTORY_SOURCE,
+    }
+    results: dict[str, dict[str, Any]] = {}
+    for key, source in required.items():
+        check = checks.get(key)
+        if not isinstance(check, dict):
+            fail(f"historical method is missing {key} six-day input")
+            continue
+        if check.get("status") != "passed":
+            fail(f"{key} volume evidence status is not passed")
+        if check.get("source") != source:
+            fail(f"{key} source must be {source}")
+        try:
+            results[key] = vre.validate_recalculated_volume_ratio(
+                trade_dates=check.get("trade_dates"),
+                volumes=check.get("volumes"),
+                target_date=target_date or "",
+                calculated_value=check.get("calculated_value"),
+                expected_value=check.get("expected_value", confirmed_value),
+                confirmed_value=confirmed_value,
+                tolerance=check.get("tolerance"),
+                authoritative_tolerance=vre.HISTORICAL_VOLUME_RATIO_ABS_TOLERANCE,
+                formula=check.get("formula"),
+            )
+        except vre.EvidenceError as exc:
+            fail(f"{key}: {exc}")
+    if len(results) == 2:
+        if abs(results["sohu_history"]["calculated_value"] - results["tencent_history"]["calculated_value"]) > vre.HISTORICAL_VOLUME_RATIO_ABS_TOLERANCE:
+            fail("Sohu and Tencent historical volume ratios do not match")
+    cross_check = volume_ratio.get("cross_check")
+    if isinstance(cross_check, dict):
+        tolerance_error = _metadata_tolerance_error(
+            cross_check.get("tolerance"),
+            vre.HISTORICAL_VOLUME_RATIO_ABS_TOLERANCE,
+            field="cross_check.tolerance",
+        )
+        if tolerance_error:
+            fail(tolerance_error)
+        formula_error = _formula_error(cross_check.get("formula"), field="cross_check.formula")
+        if formula_error:
+            fail(formula_error)
+        try:
+            cross_value = vre.finite_float(cross_check.get("value"), field="cross_check.value")
+            cross_delta = vre.finite_float(cross_check.get("delta"), field="cross_check.delta")
+            confirmed_float = vre.finite_float(confirmed_value, field="volume_ratio.confirmed_value")
+            if "tencent_history" in results and abs(cross_value - results["tencent_history"]["calculated_value"]) > vre.HISTORICAL_VOLUME_RATIO_ABS_TOLERANCE:
+                fail("historical cross_check.value does not match Tencent recomputation")
+            if abs(cross_delta - abs(cross_value - confirmed_float)) > vre.HISTORICAL_VOLUME_RATIO_ABS_TOLERANCE:
+                fail("historical cross_check.delta does not match recomputed delta")
+        except vre.EvidenceError as exc:
+            fail(str(exc))
+    else:
+        fail("historical method is missing cross_check")
+    return findings
+
+
+def _check_legacy_manual_volume_ratio_evidence(
+    *,
+    facts_pack_path: str,
+    target_date: Optional[str],
+    volume_ratio: dict[str, Any],
+) -> List[Finding]:
+    findings: List[Finding] = []
+    verification = volume_ratio.get("verification")
+    manual = volume_ratio.get("manual_verification")
+    try:
+        vre.positive_float(_volume_ratio_confirmed_value(volume_ratio), field="volume_ratio.confirmed_value")
+    except vre.EvidenceError as exc:
+        findings.append(
+            _volume_ratio_facts_finding(
+                facts_pack_path=facts_pack_path,
+                target_date=target_date,
+                matched_text=str(_volume_ratio_method(volume_ratio)),
+                reason=str(exc),
+                suggested_fix="Use a finite positive manual_confirmed volume_ratio with complete manual_verification.",
+            )
+        )
+    if not isinstance(verification, dict) or verification.get("status") != "manual_confirmed":
+        findings.append(
+            _volume_ratio_facts_finding(
+                facts_pack_path=facts_pack_path,
+                target_date=target_date,
+                matched_text=str(_volume_ratio_method(volume_ratio)),
+                reason="legacy_manual_confirmation requires verification.status=manual_confirmed",
+                suggested_fix="Use manual_confirmed with complete manual_verification.",
+            )
+        )
+    if not isinstance(manual, dict):
+        findings.append(
+            _volume_ratio_facts_finding(
+                facts_pack_path=facts_pack_path,
+                target_date=target_date,
+                matched_text=str(_volume_ratio_method(volume_ratio)),
+                reason="legacy_manual_confirmation requires manual_verification",
+                suggested_fix="Add decided_by, decided_at, source/evidence reference, and reason.",
+            )
+        )
+        return findings
+    required = ("decided_by", "decided_at", "reason")
+    for field in required:
+        if not manual.get(field):
+            findings.append(
+                _volume_ratio_facts_finding(
+                    facts_pack_path=facts_pack_path,
+                    target_date=target_date,
+                    matched_text=str(_volume_ratio_method(volume_ratio)),
+                    reason=f"manual_verification.{field} is required",
+                    suggested_fix="Complete manual verification metadata.",
+                )
+            )
+    if not (manual.get("source") or manual.get("evidence_ref") or manual.get("evidence")):
+        findings.append(
+            _volume_ratio_facts_finding(
+                facts_pack_path=facts_pack_path,
+                target_date=target_date,
+                matched_text=str(_volume_ratio_method(volume_ratio)),
+                reason="manual_verification requires source or evidence reference",
+                suggested_fix="Add manual source/evidence reference.",
+            )
+        )
+    return findings
+
+
+METHOD_VALIDATORS = {
+    vre.METHOD_LEGACY_MANUAL: _check_legacy_manual_volume_ratio_evidence,
+    vre.METHOD_SAME_DAY_SNAPSHOT: _check_same_day_snapshot_volume_ratio_evidence,
+    vre.METHOD_ARCHIVED_REVERIFICATION: _check_archived_volume_ratio_evidence,
+    vre.METHOD_HISTORICAL_FIVE_DAY: _check_historical_volume_ratio_evidence,
+}
+
+
+def _find_findings_for_facts_pack(
+    *,
+    facts_pack_path: str,
+    facts_pack: Optional[dict],
+    date: Optional[str],
+    migration_base_facts: Optional[dict[str, Any]] = None,
+) -> List[Finding]:
+    if not facts_pack or facts_pack.get("_invalid_json"):
+        return []
+    target_date = date or facts_pack.get("trade_date")
+    volume_ratio = facts_pack.get("volume_ratio")
+    if not isinstance(volume_ratio, dict):
+        return []
+    has_formal_value = volume_ratio.get("confirmed_value") is not None
+    verification = volume_ratio.get("verification")
+    if not isinstance(verification, dict):
+        if not has_formal_value:
+            return []
+        return [
+            _volume_ratio_facts_finding(
+                facts_pack_path=facts_pack_path,
+                target_date=target_date,
+                matched_text="None",
+                reason="formal volume_ratio is missing verification",
+                suggested_fix="Add an allowed status, registered method, and complete method evidence.",
+            )
+        ]
+    status = _volume_ratio_status(volume_ratio)
+    method = _volume_ratio_method(volume_ratio)
+    if not has_formal_value and status not in {"confirmed", "derived_confirmed", "manual_confirmed"}:
+        return []
+    if not method:
+        return [
+            _volume_ratio_facts_finding(
+                facts_pack_path=facts_pack_path,
+                target_date=target_date,
+                matched_text=str(method),
+                reason="formal volume_ratio is missing verification.method",
+                suggested_fix="Use a registered volume_ratio verification.method.",
+            )
+        ]
+    allowed_statuses = vre.METHOD_ALLOWED_STATUSES.get(method)
+    if allowed_statuses is None:
+        return [
+            _volume_ratio_facts_finding(
+                facts_pack_path=facts_pack_path,
+                target_date=target_date,
+                matched_text=str(method),
+                reason="unknown volume_ratio verification.method",
+                suggested_fix="Use one of the registered volume_ratio methods.",
+            )
+        ]
+    if status not in allowed_statuses:
+        return [
+            _volume_ratio_facts_finding(
+                facts_pack_path=facts_pack_path,
+                target_date=target_date,
+                matched_text=str(status),
+                reason=(
+                    f"verification.status must be one of {sorted(allowed_statuses)} "
+                    f"for method {method}"
+                ),
+                suggested_fix="Use the method-specific allowed status and complete evidence.",
+            )
+        ]
+    validator = METHOD_VALIDATORS.get(method)
+    if method == vre.METHOD_SAME_DAY_SNAPSHOT:
+        return validator(
+            facts_pack=facts_pack,
+            facts_pack_path=facts_pack_path,
+            target_date=target_date,
+            volume_ratio=volume_ratio,
+        )
+    if method == vre.METHOD_ARCHIVED_REVERIFICATION:
+        return validator(
+            facts_pack=facts_pack,
+            facts_pack_path=facts_pack_path,
+            target_date=target_date,
+            volume_ratio=volume_ratio,
+            migration_base_facts=migration_base_facts,
+        )
+    return validator(
+        facts_pack_path=facts_pack_path,
+        target_date=target_date,
+        volume_ratio=volume_ratio,
+    )
+
+
+def assert_facts_pack_valid(
+    facts_pack: dict[str, Any],
+    *,
+    facts_pack_path: str,
+    date: str | None = None,
+    migration_base_facts: dict[str, Any] | None = None,
+) -> None:
+    """Run the review-chain facts rules in-process and reject any finding."""
+
+    findings = _find_findings_for_facts_pack(
+        facts_pack_path=facts_pack_path,
+        facts_pack=facts_pack,
+        date=date,
+        migration_base_facts=migration_base_facts,
+    )
+    if findings:
+        details = "; ".join(
+            f"{finding.severity} {finding.rule_id}: {finding.reason}"
+            for finding in findings
+        )
+        raise ValueError(f"facts-pack validator failed: {details}")
 
 
 def _line_excerpt(line: str, limit: int = 160) -> str:
@@ -1353,6 +2139,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Comma-separated key levels to lint, e.g. 126.00,126.10,126.16",
     )
     parser.add_argument("--facts-pack", dest="facts_pack", help="Optional local facts pack JSON")
+    parser.add_argument(
+        "--migration-base-facts",
+        dest="migration_base_facts",
+        help="Optional locked pre-migration facts JSON for exact archived-field binding",
+    )
     parser.add_argument("--report", help="Optional Markdown report output path")
     parser.add_argument("--verbose", action="store_true", help="Print the full markdown report to stdout")
     parser.add_argument(
@@ -1410,11 +2201,21 @@ def main() -> int:
     args = parser.parse_args()
     key_levels = [item.strip() for item in args.key_levels.split(",")] if args.key_levels else []
     facts_pack = _load_facts_pack(args.facts_pack)
+    migration_base_facts = _load_facts_pack(args.migration_base_facts)
     files, file_map = _resolve_input_files(args)
     if not args.date and any(_contains_date_heading(text) for text in file_map.values()):
         raise SystemExit("--date is required for dated markdown documents to avoid treating dated sections as history")
 
     all_findings: List[Finding] = []
+    if args.facts_pack:
+        all_findings.extend(
+            _find_findings_for_facts_pack(
+                facts_pack_path=args.facts_pack,
+                facts_pack=facts_pack,
+                date=args.date,
+                migration_base_facts=migration_base_facts,
+            )
+        )
     for file_path in files:
         text = file_map.get(file_path)
         if text is None:
