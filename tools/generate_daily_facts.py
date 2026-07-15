@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import math
 import json
 import os
 import signal
@@ -19,6 +20,8 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
+from urllib.parse import urlencode
+from urllib.request import ProxyHandler, Request, build_opener
 
 
 SCHEMA_VERSION = "facts_pack_v0.2"
@@ -68,6 +71,14 @@ MANUAL_CONFIRMED_BY_VALUES = {
     "manual_check",
     "user_manual_check",
 }
+
+TENCENT_KLINE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+TENCENT_QUOTE_URL = "https://qt.gtimg.cn/q={code}"
+SOHU_HISTORY_URL = "https://q.stock.sohu.com/hisHq"
+HTTP_USER_AGENT = "Mozilla/5.0 (stocks-workbench facts generator)"
+VOLUME_RATIO_CONFIRM_TOLERANCE = 0.05
+HISTORICAL_VOLUME_RATIO_CONFIRM_TOLERANCE = 0.01
+OHLC_FIELDS = ("open", "high", "low", "close")
 
 
 @dataclass
@@ -313,10 +324,617 @@ def _classify_exception(exc: Exception) -> str:
         "name or service not known",
         "temporary failure",
         "urlopen error",
+        "ssl",
+        "unexpected_eof",
+        "remote end closed",
     )
     if any(marker in message for marker in network_markers):
         return "network_error"
     return "source_error"
+
+
+def _market_code(symbol: str) -> str:
+    prefix = "sz" if symbol.startswith(("0", "3")) else "sh"
+    return f"{prefix}{symbol}"
+
+
+def _http_get_text_direct(
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    timeout: float,
+    encoding: str = "utf-8",
+) -> str:
+    if params:
+        url = f"{url}?{urlencode(params)}"
+    request = Request(url, headers={"User-Agent": HTTP_USER_AGENT})
+    opener = build_opener(ProxyHandler({}))
+    with opener.open(request, timeout=timeout) as response:
+        return response.read().decode(encoding, errors="replace")
+
+
+def _error_fetch_result(
+    *,
+    source: str,
+    target_date: str,
+    fetched_at: str,
+    exc: Exception,
+) -> dict[str, Any]:
+    status = _classify_exception(exc)
+    return {
+        "status": status,
+        "source": source,
+        "target_date": target_date,
+        "source_date": None,
+        "rows": [],
+        "raw_record": None,
+        "previous_record": None,
+        "source_pct_change": None,
+        "source_name": None,
+        "quote": None,
+        "fetched_at": fetched_at,
+        "error_type": status,
+        "error_message": f"{type(exc).__name__}: {exc}",
+    }
+
+
+def _strip_percent(value: Any) -> Any:
+    return value.rstrip("%") if isinstance(value, str) else value
+
+
+def parse_tencent_snapshot(fields: list[Any]) -> dict[str, Any] | None:
+    if len(fields) <= 49:
+        return None
+    timestamp = str(fields[30] or "").strip()
+    source_date = normalize_date_text(timestamp[:8]) if len(timestamp) >= 8 else None
+    amount = None
+    compound = str(fields[35] or "")
+    compound_parts = compound.split("/")
+    if len(compound_parts) >= 3:
+        amount_yuan = to_float_or_none(compound_parts[2])
+        if amount_yuan is not None:
+            amount = amount_yuan / 1e8
+    if amount is None:
+        amount_wan = to_float_or_none(fields[37])
+        if amount_wan is not None:
+            amount = amount_wan / 10000
+    return {
+        "source_date": source_date,
+        "source_timestamp": timestamp or None,
+        "is_closed": len(timestamp) >= 14 and timestamp[8:14] >= "150000",
+        "name": normalize_name_text(fields[1]),
+        "open": to_float_or_none(fields[5]),
+        "high": to_float_or_none(fields[33]),
+        "low": to_float_or_none(fields[34]),
+        "close": to_float_or_none(fields[3]),
+        "prev_close": to_float_or_none(fields[4]),
+        "pct_change": to_float_or_none(fields[32]),
+        "volume": to_float_or_none(fields[36]),
+        "amount": amount,
+        "turnover_rate": to_float_or_none(fields[38]),
+        "volume_ratio": to_float_or_none(fields[49]),
+    }
+
+
+def _parse_tencent_quote_text(text: str) -> list[str]:
+    if '="' not in text:
+        raise ValueError("Tencent quote payload missing field delimiter")
+    payload = text.split('="', 1)[1].rsplit('";', 1)[0]
+    return payload.split("~")
+
+
+def _quote_values_match(
+    left: dict[str, Any],
+    right: dict[str, Any],
+    *,
+    fields: tuple[str, ...] = OHLC_FIELDS,
+    tolerance: float = 0.02,
+) -> bool:
+    for field in fields:
+        if isinstance(left.get(field), bool) or isinstance(right.get(field), bool):
+            return False
+        left_value = to_float_or_none(left.get(field))
+        right_value = to_float_or_none(right.get(field))
+        if left_value is None or right_value is None:
+            return False
+        if not math.isfinite(left_value) or not math.isfinite(right_value):
+            return False
+        if abs(left_value - right_value) > tolerance:
+            return False
+    return True
+
+
+def _tencent_kline_records(payload: dict[str, Any], code: str) -> tuple[list[dict[str, Any]], list[Any] | None]:
+    stock_data = payload.get("data", {}).get(code)
+    if not isinstance(stock_data, dict):
+        raise ValueError(f"Tencent kline payload missing {code}")
+    raw_rows = stock_data.get("day") or stock_data.get("qfqday") or []
+    records = []
+    for row in raw_rows:
+        if not isinstance(row, list) or len(row) < 6:
+            continue
+        records.append(
+            {
+                "date": row[0],
+                "open": row[1],
+                "close": row[2],
+                "high": row[3],
+                "low": row[4],
+                "volume": row[5],
+            }
+        )
+    qt = stock_data.get("qt", {}).get(code)
+    return _sort_records_by_date(records), qt if isinstance(qt, list) else None
+
+
+def derive_five_day_volume_ratio(records: list[dict[str, Any]], target_date: str) -> float | None:
+    dated_records = [
+        (record_date_text(row), row)
+        for row in records
+        if record_date_text(row) is not None
+    ]
+    if sum(1 for date_text, _row in dated_records if date_text == target_date) != 1:
+        return None
+    sorted_records = [row for _date_text, row in sorted(dated_records, key=lambda item: item[0] or "")]
+    target_index = next(
+        (index for index, row in enumerate(sorted_records) if record_date_text(row) == target_date),
+        None,
+    )
+    if target_index is None or target_index < 5:
+        return None
+    window_dates = [
+        record_date_text(row)
+        for row in sorted_records[target_index - 5 : target_index + 1]
+    ]
+    if any(date_text is None for date_text in window_dates):
+        return None
+    if len(set(window_dates)) != len(window_dates):
+        return None
+    current_volume = to_float_or_none(sorted_records[target_index].get("volume"))
+    prior_volumes = [
+        to_float_or_none(row.get("volume"))
+        for row in sorted_records[target_index - 5 : target_index]
+    ]
+    if current_volume is None or any(value is None for value in prior_volumes):
+        return None
+    average_volume = sum(value for value in prior_volumes if value is not None) / 5
+    if not average_volume:
+        return None
+    return round(current_volume / average_volume, 2)
+
+
+def _quote_from_tencent_record(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "open": to_float_or_none(record.get("open")),
+        "high": to_float_or_none(record.get("high")),
+        "low": to_float_or_none(record.get("low")),
+        "close": to_float_or_none(record.get("close")),
+    }
+
+
+def _target_quote_from_records(records: list[dict[str, Any]], target_date: str) -> dict[str, Any] | None:
+    target = next((row for row in records if record_date_text(row) == target_date), None)
+    return _quote_from_tencent_record(target) if target else None
+
+
+def _same_day_snapshot_ohlc_matched(
+    *,
+    snapshot: dict[str, Any] | None,
+    target_quote: dict[str, Any] | None,
+    target_date: str,
+) -> bool:
+    return bool(
+        snapshot
+        and target_quote
+        and snapshot.get("source_date") == target_date
+        and snapshot.get("is_closed")
+        and snapshot.get("volume_ratio") is not None
+        and _quote_values_match(target_quote, snapshot)
+    )
+
+
+def _snapshot_ohlc_evidence(snapshot_source: str | None, target_date: str) -> dict[str, Any]:
+    return {
+        "status": "matched",
+        "fields": list(OHLC_FIELDS),
+        "snapshot_source": snapshot_source,
+        "matched_to": "tencent_fqkline",
+        "source_date": target_date,
+        "tolerance": 0.02,
+    }
+
+
+def fetch_sohu_quote(_client: Any, symbol: str, target_date: str, timeout: float) -> dict[str, Any]:
+    fetched_at = utc_now_iso_z()
+    start_date = (parse_date(target_date) - timedelta(days=45)).strftime("%Y%m%d")
+    end_date = parse_date(target_date).strftime("%Y%m%d")
+    try:
+        text = _http_get_text_direct(
+            SOHU_HISTORY_URL,
+            params={
+                "code": f"cn_{symbol}",
+                "start": start_date,
+                "end": end_date,
+                "stat": "1",
+                "order": "D",
+                "period": "d",
+                "callback": "historySearchHandler",
+                "rt": "jsonp",
+            },
+            timeout=timeout,
+            encoding="gb18030",
+        )
+        start = text.find("(")
+        end = text.rfind(")")
+        if start < 0 or end <= start:
+            raise ValueError("Sohu payload missing JSONP wrapper")
+        payload = json.loads(text[start + 1 : end])
+        hq = payload[0].get("hq", []) if isinstance(payload, list) and payload else []
+        records = []
+        for row in hq:
+            if not isinstance(row, list) or len(row) < 10:
+                continue
+            records.append(
+                {
+                    "date": row[0],
+                    "open": row[1],
+                    "close": row[2],
+                    "change": row[3],
+                    "pct_change": _strip_percent(row[4]),
+                    "low": row[5],
+                    "high": row[6],
+                    "volume": row[7],
+                    "amount_wan": row[8],
+                    "turnover_rate": _strip_percent(row[9]),
+                }
+            )
+        records = _sort_records_by_date(records)
+    except Exception as exc:  # noqa: BLE001
+        return _error_fetch_result(source="sohu", target_date=target_date, fetched_at=fetched_at, exc=exc)
+
+    target_index = next((index for index, row in enumerate(records) if record_date_text(row) == target_date), None)
+    if target_index is None:
+        return {
+            **_error_fetch_result(
+                source="sohu",
+                target_date=target_date,
+                fetched_at=fetched_at,
+                exc=ValueError(f"returned dates do not include target date {target_date}"),
+            ),
+            "status": "date_mismatch",
+            "error_type": "date_mismatch",
+            "source_date": record_date_text(records[-1]) if records else None,
+            "rows": records,
+        }
+
+    raw_record = records[target_index]
+    previous_record = records[target_index - 1] if target_index > 0 else None
+    close_value = to_float_or_none(raw_record.get("close"))
+    change_value = to_float_or_none(raw_record.get("change"))
+    prev_close = to_float_or_none(previous_record.get("close")) if previous_record else None
+    if prev_close is None and close_value is not None and change_value is not None:
+        prev_close = close_value - change_value
+    amount_wan = to_float_or_none(raw_record.get("amount_wan"))
+    return {
+        "status": "ok",
+        "source": "sohu",
+        "target_date": target_date,
+        "source_date": target_date,
+        "rows": records,
+        "raw_record": raw_record,
+        "previous_record": previous_record,
+        "source_pct_change": to_float_or_none(raw_record.get("pct_change")),
+        "source_name": None,
+        "quote": {
+            "open": to_float_or_none(raw_record.get("open")),
+            "high": to_float_or_none(raw_record.get("high")),
+            "low": to_float_or_none(raw_record.get("low")),
+            "close": close_value,
+            "prev_close": prev_close,
+            "amount": amount_wan / 10000 if amount_wan is not None else None,
+            "turnover_rate": to_float_or_none(raw_record.get("turnover_rate")),
+        },
+        "field_sources": {
+            field: "sohu_history"
+            for field in ("open", "high", "low", "close", "prev_close", "amount", "turnover_rate")
+        },
+        "fetched_at": fetched_at,
+        "error_type": None,
+        "error_message": None,
+    }
+
+
+def fetch_tencent_direct_quote(_client: Any, symbol: str, target_date: str, timeout: float) -> dict[str, Any]:
+    fetched_at = utc_now_iso_z()
+    code = _market_code(symbol)
+    start_date = (parse_date(target_date) - timedelta(days=45)).date().isoformat()
+    try:
+        text = _http_get_text_direct(
+            TENCENT_KLINE_URL,
+            params={"param": f"{code},day,{start_date},{target_date},80,"},
+            timeout=timeout,
+        )
+        payload = json.loads(text)
+        records, qt_fields = _tencent_kline_records(payload, code)
+    except Exception as exc:  # noqa: BLE001
+        return _error_fetch_result(source="tencent", target_date=target_date, fetched_at=fetched_at, exc=exc)
+
+    target_index = next((index for index, row in enumerate(records) if record_date_text(row) == target_date), None)
+    if target_index is None:
+        return {
+            **_error_fetch_result(
+                source="tencent",
+                target_date=target_date,
+                fetched_at=fetched_at,
+                exc=ValueError(f"returned dates do not include target date {target_date}"),
+            ),
+            "status": "date_mismatch",
+            "error_type": "date_mismatch",
+            "source_date": record_date_text(records[-1]) if records else None,
+            "rows": records,
+        }
+
+    raw_record = records[target_index]
+    previous_record = records[target_index - 1] if target_index > 0 else None
+    quote = {
+        "open": to_float_or_none(raw_record.get("open")),
+        "high": to_float_or_none(raw_record.get("high")),
+        "low": to_float_or_none(raw_record.get("low")),
+        "close": to_float_or_none(raw_record.get("close")),
+        "prev_close": to_float_or_none(previous_record.get("close")) if previous_record else None,
+        "amount": None,
+        "turnover_rate": None,
+    }
+    field_sources = {
+        field: "tencent_fqkline"
+        for field in ("open", "high", "low", "close", "prev_close")
+    }
+    snapshot = parse_tencent_snapshot(qt_fields) if qt_fields else None
+    source_name = snapshot.get("name") if snapshot else None
+    source_pct_change = None
+    if snapshot and snapshot.get("source_date") == target_date and snapshot.get("is_closed"):
+        if _quote_values_match(quote, snapshot):
+            quote["amount"] = snapshot.get("amount")
+            quote["turnover_rate"] = snapshot.get("turnover_rate")
+            field_sources["amount"] = "tencent_qt_snapshot"
+            field_sources["turnover_rate"] = "tencent_qt_snapshot"
+            source_pct_change = snapshot.get("pct_change")
+
+    errors = []
+    if quote["amount"] is None or quote["turnover_rate"] is None:
+        sohu = fetch_sohu_quote(None, symbol, target_date, timeout)
+        if sohu.get("status") == "ok" and _quote_values_match(quote, sohu.get("quote") or {}):
+            sohu_quote = sohu.get("quote") or {}
+            source_pct_change = sohu.get("source_pct_change")
+            for field in ("amount", "turnover_rate"):
+                if quote[field] is None and sohu_quote.get(field) is not None:
+                    quote[field] = sohu_quote[field]
+                    field_sources[field] = "sohu_history"
+        elif sohu.get("status") not in {"ok", "date_mismatch"}:
+            errors.append(
+                {
+                    "source": "sohu",
+                    "error_type": sohu.get("error_type") or sohu.get("status"),
+                    "error_message": sohu.get("error_message"),
+                    "fetched_at": sohu.get("fetched_at"),
+                    "recovered": quote["amount"] is not None and quote["turnover_rate"] is not None,
+                }
+            )
+        elif sohu.get("status") == "ok":
+            errors.append(
+                {
+                    "source": "sohu",
+                    "error_type": "quote_enrichment_conflict",
+                    "error_message": "Sohu quote does not match Tencent historical quote",
+                    "fetched_at": sohu.get("fetched_at"),
+                    "recovered": False,
+                }
+            )
+
+    return {
+        "status": "ok",
+        "source": "tencent",
+        "target_date": target_date,
+        "source_date": target_date,
+        "rows": records,
+        "raw_record": raw_record,
+        "previous_record": previous_record,
+        "source_pct_change": source_pct_change,
+        "source_name": source_name,
+        "quote": quote,
+        "field_sources": field_sources,
+        "fetched_at": fetched_at,
+        "error_type": None,
+        "error_message": None,
+        "errors": errors,
+    }
+
+
+def fetch_volume_ratio_candidate(symbol: str, target_date: str, timeout: float) -> dict[str, Any] | None:
+    fetched_at = utc_now_iso_z()
+    code = _market_code(symbol)
+    snapshot_source = None
+    try:
+        text = _http_get_text_direct(
+            TENCENT_QUOTE_URL.format(code=code),
+            timeout=timeout,
+            encoding="gb18030",
+        )
+        snapshot = parse_tencent_snapshot(_parse_tencent_quote_text(text))
+        snapshot_source = "tencent_qt_direct_index_49"
+    except Exception as exc:  # noqa: BLE001
+        snapshot = None
+        snapshot_error = exc
+    else:
+        snapshot_error = None
+
+    sohu = fetch_sohu_quote(None, symbol, target_date, timeout)
+    sohu_derived = (
+        derive_five_day_volume_ratio(sohu.get("rows") or [], target_date)
+        if sohu.get("status") == "ok"
+        else None
+    )
+    tencent_derived = None
+    tencent_history_error = None
+    target_quote = None
+    embedded_snapshot = None
+    try:
+        start_date = (parse_date(target_date) - timedelta(days=45)).date().isoformat()
+        text = _http_get_text_direct(
+            TENCENT_KLINE_URL,
+            params={"param": f"{code},day,{start_date},{target_date},80,"},
+            timeout=timeout,
+        )
+        records, embedded_qt_fields = _tencent_kline_records(json.loads(text), code)
+        tencent_derived = derive_five_day_volume_ratio(records, target_date)
+        target_quote = _target_quote_from_records(records, target_date)
+        embedded_snapshot = parse_tencent_snapshot(embedded_qt_fields) if embedded_qt_fields else None
+    except Exception as exc:  # noqa: BLE001
+        tencent_history_error = exc
+
+    usable_snapshot = None
+    usable_snapshot_source = None
+    if _same_day_snapshot_ohlc_matched(
+        snapshot=snapshot,
+        target_quote=target_quote,
+        target_date=target_date,
+    ):
+        usable_snapshot = snapshot
+        usable_snapshot_source = snapshot_source
+    elif _same_day_snapshot_ohlc_matched(
+        snapshot=embedded_snapshot,
+        target_quote=target_quote,
+        target_date=target_date,
+    ):
+        usable_snapshot = embedded_snapshot
+        usable_snapshot_source = "tencent_kline_embedded_qt_index_49"
+
+    if usable_snapshot:
+        snapshot = usable_snapshot
+        snapshot_source = usable_snapshot_source
+        snapshot_value = to_float_or_none(snapshot.get("volume_ratio"))
+        cross_check = {
+            "value": sohu_derived,
+            "source": "sohu_five_day_volume_derived" if sohu_derived is not None else None,
+            "source_date": target_date if sohu_derived is not None else None,
+            "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+            "tolerance": VOLUME_RATIO_CONFIRM_TOLERANCE,
+            "delta": abs(snapshot_value - sohu_derived)
+            if snapshot_value is not None and sohu_derived is not None
+            else None,
+        }
+        auto_confirmed = (
+            snapshot_value is not None
+            and sohu_derived is not None
+            and cross_check["delta"] <= VOLUME_RATIO_CONFIRM_TOLERANCE
+        )
+        conflict = snapshot_value is not None and sohu_derived is not None and not auto_confirmed
+        verification_status = "confirmed" if auto_confirmed else "conflict" if conflict else "candidate"
+        return {
+            "candidate_value": snapshot_value,
+            "source": (
+                f"{snapshot_source}+sohu_five_day_volume"
+                if sohu_derived is not None
+                else snapshot_source
+            ),
+            "source_date": target_date,
+            "fetched_at": fetched_at,
+            "method": (
+                "same_day_snapshot_plus_sohu_five_day_cross_check"
+                if sohu_derived is not None
+                else "same_day_close_snapshot"
+            ),
+            "confirmed_by": "automation_cross_check" if auto_confirmed else "none",
+            "verification_status": verification_status,
+            "cross_check": cross_check,
+            "snapshot_ohlc_check": _snapshot_ohlc_evidence(snapshot_source, target_date),
+            "notes": (
+                "same-day Tencent close snapshot confirmed by Sohu five-day volume calculation"
+                if auto_confirmed
+                else "Tencent snapshot conflicts with Sohu five-day volume calculation"
+                if conflict
+                else "same-day Tencent close snapshot candidate; independent cross-check unavailable"
+            ),
+            "error_type": None,
+            "error_message": None,
+        }
+
+    if sohu_derived is not None and tencent_derived is not None:
+        delta = abs(sohu_derived - tencent_derived)
+        auto_confirmed = delta <= HISTORICAL_VOLUME_RATIO_CONFIRM_TOLERANCE
+        return {
+            "candidate_value": sohu_derived,
+            "source": "sohu_five_day_volume+tencent_five_day_volume",
+            "source_date": target_date,
+            "fetched_at": fetched_at,
+            "method": "historical_five_day_volume_cross_check",
+            "confirmed_by": "automation_cross_check" if auto_confirmed else "none",
+            "verification_status": "confirmed" if auto_confirmed else "conflict",
+            "cross_check": {
+                "value": tencent_derived,
+                "source": "tencent_five_day_volume_derived",
+                "source_date": target_date,
+                "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+                "tolerance": HISTORICAL_VOLUME_RATIO_CONFIRM_TOLERANCE,
+                "delta": delta,
+            },
+            "notes": (
+                "historical volume ratio confirmed from Sohu and Tencent daily volume; "
+                "amount-based ratios are not accepted"
+                if auto_confirmed
+                else "Sohu and Tencent historical volume-derived ratios conflict"
+            ),
+            "error_type": None,
+            "error_message": None,
+        }
+
+    if sohu_derived is not None:
+        return {
+            "candidate_value": sohu_derived,
+            "source": "sohu_five_day_volume_derived",
+            "source_date": target_date,
+            "fetched_at": fetched_at,
+            "method": "derived_candidate",
+            "confirmed_by": "none",
+            "verification_status": "candidate",
+            "notes": (
+                "derived from Sohu target-day volume divided by prior five trading-day average; "
+                "single-source candidate only; amount-based ratios are not accepted"
+            ),
+            "error_type": type(snapshot_error).__name__ if snapshot_error else None,
+            "error_message": str(snapshot_error) if snapshot_error else None,
+        }
+
+    if tencent_derived is not None:
+        return {
+            "candidate_value": tencent_derived,
+            "source": "tencent_five_day_volume_derived",
+            "source_date": target_date,
+            "fetched_at": fetched_at,
+            "method": "derived_candidate",
+            "confirmed_by": "none",
+            "verification_status": "candidate",
+            "notes": (
+                "derived from Tencent target-day volume divided by prior five trading-day average; "
+                "single-source candidate only; amount-based ratios are not accepted"
+            ),
+            "error_type": type(snapshot_error).__name__ if snapshot_error else None,
+            "error_message": str(snapshot_error) if snapshot_error else None,
+        }
+
+    final_error = tencent_history_error or snapshot_error or ValueError(
+        "same-day snapshot and five-day volume history unavailable"
+    )
+    return {
+        "candidate_value": None,
+        "source": "tencent_volume_ratio_chain",
+        "source_date": None,
+        "fetched_at": fetched_at,
+        "method": "unavailable",
+        "notes": "same-day snapshot and derived candidate unavailable",
+        "error_type": _classify_exception(final_error),
+        "error_message": f"{type(final_error).__name__}: {final_error}",
+    }
 
 
 def _fetch_records(
@@ -489,10 +1107,14 @@ def _fetch_records(
 
 
 def fetch_primary_quote(ak_client: Any, symbol: str, target_date: str, timeout: float) -> dict[str, Any]:
+    if ak_client is None:
+        ak_client = _load_akshare_client()
     return _fetch_records(ak_client, source="tencent", symbol=symbol, target_date=target_date, timeout=timeout)
 
 
 def fetch_fallback_quote(ak_client: Any, symbol: str, target_date: str, timeout: float) -> dict[str, Any]:
+    if ak_client is None:
+        ak_client = _load_akshare_client()
     return _fetch_records(ak_client, source="eastmoney", symbol=symbol, target_date=target_date, timeout=timeout)
 
 
@@ -534,6 +1156,7 @@ def normalize_quote(fetch_result: dict[str, Any]) -> tuple[dict[str, Any], dict[
         "notes": None,
         "error_type": fetch_result.get("error_type"),
         "error_message": fetch_result.get("error_message"),
+        "field_sources": copy.deepcopy(fetch_result.get("field_sources") or {}),
     }
     if source_pct is not None and derived_pct is not None:
         quote_verification["delta"] = derived_pct - source_pct
@@ -611,13 +1234,23 @@ def build_volume_ratio_block(
     if candidate and candidate.get("candidate_value") is not None:
         candidate_source_date = normalize_date_text(candidate.get("source_date"))
         if candidate_source_date == target_date:
-            merged["candidate_value"] = to_float_or_none(candidate.get("candidate_value"))
+            candidate_value = to_float_or_none(candidate.get("candidate_value"))
+            candidate_status = str(candidate.get("verification_status") or "candidate")
+            if candidate_status not in {"candidate", "confirmed", "conflict"}:
+                candidate_status = "candidate"
+            merged["candidate_value"] = candidate_value
+            if candidate_status == "confirmed":
+                merged["confirmed_value"] = candidate_value
             merged["source"] = candidate.get("source")
+            if isinstance(candidate.get("cross_check"), dict):
+                merged["cross_check"] = copy.deepcopy(candidate["cross_check"])
+            if isinstance(candidate.get("snapshot_ohlc_check"), dict):
+                merged["snapshot_ohlc_check"] = copy.deepcopy(candidate["snapshot_ohlc_check"])
             merged["verification"].update(
                 {
-                    "status": "candidate",
+                    "status": candidate_status,
                     "method": candidate.get("method") or "source",
-                    "confirmed_by": "none",
+                    "confirmed_by": candidate.get("confirmed_by") or "none",
                     "source": candidate.get("source"),
                     "source_date": candidate_source_date,
                     "fetched_at": candidate.get("fetched_at") or fetched_at,
@@ -1064,7 +1697,7 @@ def _attempt_fetch_chain(
 def run(
     args: argparse.Namespace,
     *,
-    fetch_primary: Callable[[Any, str, str, float], dict[str, Any]] = fetch_primary_quote,
+    fetch_primary: Callable[[Any, str, str, float], dict[str, Any]] = fetch_tencent_direct_quote,
     fetch_fallback: Callable[[Any, str, str, float], dict[str, Any]] = fetch_fallback_quote,
     volume_ratio_candidate_provider: Callable[[str, str, float], dict[str, Any] | None] | None = None,
     ak_client: Any | None = None,
@@ -1094,8 +1727,6 @@ def run(
             )
 
     client = ak_client
-    if client is None and (fetch_primary is fetch_primary_quote or fetch_fallback is fetch_fallback_quote):
-        client = _load_akshare_client()
     quote_result, errors, fatal_status = _attempt_fetch_chain(
         ak_client=client,
         symbol=args.symbol,
@@ -1115,7 +1746,7 @@ def run(
             status=status,
         )
     quote_result = dict(quote_result)
-    quote_result["errors"] = _normalize_errors(errors)
+    quote_result["errors"] = _normalize_errors([*(quote_result.get("errors") or []), *errors])
     if quote_result.get("status") == "date_mismatch":
         return RunOutcome(
             exit_code=EXIT_DATE_MISMATCH,
@@ -1166,7 +1797,7 @@ def run(
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    outcome = run(args)
+    outcome = run(args, volume_ratio_candidate_provider=fetch_volume_ratio_candidate)
     if args.dry_run:
         print(json.dumps(outcome.facts_pack, ensure_ascii=False, indent=2))
     elif args.no_write:

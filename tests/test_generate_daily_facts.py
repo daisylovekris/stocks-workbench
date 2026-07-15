@@ -2,6 +2,7 @@ import contextlib
 import copy
 import io
 import json
+import math
 import subprocess
 import tempfile
 import unittest
@@ -126,7 +127,446 @@ def make_table_client(*, daily_rows=None, hist_rows=None):
     return TableClient()
 
 
+def make_tencent_qt_fields(*, source_timestamp="20260714161436", volume_ratio="1.49", overrides=None):
+    fields = [""] * 88
+    values = {
+        0: "51",
+        1: "阳光电源",
+        2: "300274",
+        3: "108.29",
+        4: "108.00",
+        5: "108.00",
+        30: source_timestamp,
+        32: "0.27",
+        33: "109.26",
+        34: "100.73",
+        35: "108.29/960311/10065149576",
+        36: "960311",
+        37: "1006515",
+        38: "6.05",
+        49: volume_ratio,
+    }
+    if overrides:
+        values.update(overrides)
+    for index, value in values.items():
+        fields[index] = value
+    return fields
+
+
+def make_tencent_kline_payload(*, qt_fields=None, include_qt=True):
+    stock_data = {
+        "day": [
+            ["2026-07-06", "126.000", "128.180", "131.900", "126.000", "522306.000"],
+            ["2026-07-07", "127.450", "127.530", "131.680", "126.350", "442203.000"],
+            ["2026-07-08", "127.000", "124.490", "130.130", "124.010", "413086.000"],
+            ["2026-07-09", "124.000", "124.010", "124.600", "118.060", "673516.000"],
+            ["2026-07-10", "123.170", "114.790", "123.800", "114.000", "939380.000"],
+            ["2026-07-13", "112.540", "108.000", "114.050", "106.800", "745683.000"],
+            ["2026-07-14", "108.000", "108.290", "109.260", "100.730", "960311.000"],
+        ],
+    }
+    if include_qt:
+        stock_data["qt"] = {"sz300274": qt_fields or make_tencent_qt_fields()}
+    return json.dumps({"code": 0, "msg": "", "data": {"sz300274": stock_data}})
+
+
+def make_sohu_volume_result():
+    return {
+        "status": "ok",
+        "source": "sohu",
+        "source_date": "2026-07-14",
+        "rows": [
+            {"date": "2026-07-06", "volume": "522306"},
+            {"date": "2026-07-07", "volume": "442203"},
+            {"date": "2026-07-08", "volume": "413086"},
+            {"date": "2026-07-09", "volume": "673516"},
+            {"date": "2026-07-10", "volume": "939380"},
+            {"date": "2026-07-13", "volume": "745683"},
+            {"date": "2026-07-14", "volume": "960311"},
+        ],
+    }
+
+
 class GenerateDailyFactsTests(unittest.TestCase):
+    def test_quote_values_match_requires_complete_ohlc(self):
+        left = {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5}
+        self.assertFalse(gdf._quote_values_match(left, {"open": 1.0}))
+        self.assertFalse(gdf._quote_values_match(left, {"open": 1.0, "low": 0.5, "close": 1.5}))
+        self.assertTrue(gdf._quote_values_match(left, {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5}))
+        self.assertFalse(gdf._quote_values_match(left, {"open": 1.0, "high": 2.03, "low": 0.5, "close": 1.5}))
+
+    def test_quote_values_match_rejects_non_finite_and_boolean_ohlc_values(self):
+        finite_left = {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5}
+        finite_right = {"open": 1.01, "high": 2.0, "low": 0.5, "close": 1.5}
+
+        cases = [
+            ("left nan", {"open": math.nan, "high": 2.0, "low": 0.5, "close": 1.5}, finite_right),
+            ("right nan", finite_left, {"open": math.nan, "high": 2.0, "low": 0.5, "close": 1.5}),
+            ("left +inf", {"open": math.inf, "high": 2.0, "low": 0.5, "close": 1.5}, finite_right),
+            ("right +inf", finite_left, {"open": math.inf, "high": 2.0, "low": 0.5, "close": 1.5}),
+            ("left -inf", {"open": -math.inf, "high": 2.0, "low": 0.5, "close": 1.5}, finite_right),
+            ("right -inf", finite_left, {"open": -math.inf, "high": 2.0, "low": 0.5, "close": 1.5}),
+            ("both nan", {"open": math.nan, "high": 2.0, "low": 0.5, "close": 1.5}, {"open": math.nan, "high": 2.0, "low": 0.5, "close": 1.5}),
+            ("both +inf", {"open": math.inf, "high": 2.0, "low": 0.5, "close": 1.5}, {"open": math.inf, "high": 2.0, "low": 0.5, "close": 1.5}),
+            ("both -inf", {"open": -math.inf, "high": 2.0, "low": 0.5, "close": 1.5}, {"open": -math.inf, "high": 2.0, "low": 0.5, "close": 1.5}),
+            ("left bool", {"open": True, "high": 2.0, "low": 0.5, "close": 1.5}, finite_right),
+            ("right bool", finite_left, {"open": False, "high": 2.0, "low": 0.5, "close": 1.5}),
+        ]
+        for label, left, right in cases:
+            with self.subTest(label=label):
+                self.assertFalse(gdf._quote_values_match(left, right))
+
+    def test_quote_values_match_keeps_finite_tolerance_behavior(self):
+        left = {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5}
+        within_tolerance = {"open": 1.019, "high": 2.0, "low": 0.5, "close": 1.5}
+        outside_tolerance = {"open": 1.021, "high": 2.0, "low": 0.5, "close": 1.5}
+
+        self.assertTrue(gdf._quote_values_match(left, within_tolerance))
+        self.assertFalse(gdf._quote_values_match(left, outside_tolerance))
+
+    def test_parse_tencent_snapshot_uses_close_field_mapping(self):
+        snapshot = gdf.parse_tencent_snapshot(make_tencent_qt_fields())
+        self.assertEqual(snapshot["source_date"], "2026-07-14")
+        self.assertTrue(snapshot["is_closed"])
+        self.assertEqual(snapshot["amount"], 100.65149576)
+        self.assertEqual(snapshot["turnover_rate"], 6.05)
+        self.assertEqual(snapshot["volume_ratio"], 1.49)
+        self.assertEqual(snapshot["pct_change"], 0.27)
+
+    def test_tencent_direct_same_day_snapshot_fills_amount_and_turnover(self):
+        with mock.patch.object(gdf, "_http_get_text_direct", return_value=make_tencent_kline_payload()):
+            result = gdf.fetch_tencent_direct_quote(None, "300274", "2026-07-14", 15.0)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["quote"]["amount"], 100.65149576)
+        self.assertEqual(result["quote"]["turnover_rate"], 6.05)
+        self.assertEqual(result["source_pct_change"], 0.27)
+        self.assertEqual(result["field_sources"]["turnover_rate"], "tencent_qt_snapshot")
+        self.assertEqual(result["source_name"], "阳光电源")
+
+    def test_tencent_snapshot_missing_close_does_not_fill_amount_or_turnover(self):
+        fields = make_tencent_qt_fields(overrides={3: ""})
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", return_value=make_tencent_kline_payload(qt_fields=fields)),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value={"status": "network_error", "rows": []}),
+        ):
+            result = gdf.fetch_tencent_direct_quote(None, "300274", "2026-07-14", 15.0)
+        self.assertIsNone(result["quote"]["amount"])
+        self.assertIsNone(result["quote"]["turnover_rate"])
+        self.assertNotIn("amount", result["field_sources"])
+        self.assertNotIn("turnover_rate", result["field_sources"])
+
+    def test_sohu_history_maps_amount_and_turnover(self):
+        payload = (
+            'historySearchHandler([{"status":0,"hq":['
+            '["2026-07-14","108.00","108.29","0.29","0.27%","100.73","109.26",'
+            '"960311","1006515.00","6.05%","164.00"],'
+            '["2026-07-13","112.54","108.00","-6.79","-5.92%","106.80","114.05",'
+            '"745683","816836.88","4.70%","209.00"]],"code":"cn_300274"}])'
+        )
+        with mock.patch.object(gdf, "_http_get_text_direct", return_value=payload):
+            result = gdf.fetch_sohu_quote(None, "300274", "2026-07-13", 15.0)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["quote"]["amount"], 81.683688)
+        self.assertEqual(result["quote"]["turnover_rate"], 4.7)
+        self.assertEqual(result["source_pct_change"], -5.92)
+        self.assertEqual(result["quote"]["prev_close"], 114.79)
+
+    def test_sohu_fallback_missing_ohlc_does_not_fill_amount_or_turnover(self):
+        sohu_result = make_quote_result(
+            status="ok",
+            source="sohu",
+            source_date="2026-07-14",
+            quote={
+                "open": 108.0,
+                "high": None,
+                "low": 100.73,
+                "close": 108.29,
+                "prev_close": 108.0,
+                "amount": 100.65149576,
+                "turnover_rate": 6.05,
+            },
+            source_pct_change=0.27,
+        )
+        stale_snapshot = make_tencent_qt_fields(source_timestamp="20260713161436")
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", return_value=make_tencent_kline_payload(qt_fields=stale_snapshot)),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value=sohu_result),
+        ):
+            result = gdf.fetch_tencent_direct_quote(None, "300274", "2026-07-14", 15.0)
+        self.assertIsNone(result["quote"]["amount"])
+        self.assertIsNone(result["quote"]["turnover_rate"])
+        self.assertNotIn("amount", result["field_sources"])
+        self.assertNotIn("turnover_rate", result["field_sources"])
+
+    def test_tencent_direct_rejects_latest_snapshot_for_historical_date_and_uses_sohu(self):
+        sohu_result = make_quote_result(
+            status="ok",
+            source="sohu",
+            source_date="2026-07-13",
+            quote={
+                "open": 112.54,
+                "high": 114.05,
+                "low": 106.8,
+                "close": 108.0,
+                "prev_close": 114.79,
+                "amount": 81.683688,
+                "turnover_rate": 4.7,
+            },
+            source_pct_change=-5.92,
+        )
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", return_value=make_tencent_kline_payload()),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value=sohu_result),
+        ):
+            result = gdf.fetch_tencent_direct_quote(None, "300274", "2026-07-13", 15.0)
+        self.assertEqual(result["quote"]["amount"], 81.683688)
+        self.assertEqual(result["quote"]["turnover_rate"], 4.7)
+        self.assertEqual(result["field_sources"]["turnover_rate"], "sohu_history")
+        self.assertEqual(result["source_name"], "阳光电源")
+
+    def test_volume_ratio_candidate_uses_same_day_snapshot(self):
+        quote_text = f'v_sz300274="{"~".join(make_tencent_qt_fields())}";'
+        def fake_http(url, **_kwargs):
+            return quote_text if "qt.gtimg.cn" in url else make_tencent_kline_payload(include_qt=False)
+
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", side_effect=fake_http),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value=make_sohu_volume_result()),
+        ):
+            candidate = gdf.fetch_volume_ratio_candidate("300274", "2026-07-14", 15.0)
+        self.assertEqual(candidate["candidate_value"], 1.49)
+        self.assertEqual(candidate["source_date"], "2026-07-14")
+        self.assertEqual(candidate["verification_status"], "confirmed")
+        self.assertEqual(candidate["confirmed_by"], "automation_cross_check")
+        self.assertEqual(candidate["cross_check"]["value"], 1.49)
+        self.assertEqual(candidate["snapshot_ohlc_check"]["status"], "matched")
+        self.assertEqual(candidate["snapshot_ohlc_check"]["fields"], ["open", "high", "low", "close"])
+
+    def test_volume_ratio_uses_embedded_snapshot_when_direct_quote_fails(self):
+        def fake_http(url, **_kwargs):
+            if "qt.gtimg.cn" in url:
+                raise OSError("SSL EOF")
+            return make_tencent_kline_payload()
+
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", side_effect=fake_http),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value=make_sohu_volume_result()),
+        ):
+            candidate = gdf.fetch_volume_ratio_candidate("300274", "2026-07-14", 15.0)
+        self.assertEqual(candidate["verification_status"], "confirmed")
+        self.assertEqual(candidate["candidate_value"], 1.49)
+        self.assertIn("tencent_kline_embedded_qt_index_49", candidate["source"])
+        self.assertEqual(candidate["snapshot_ohlc_check"]["snapshot_source"], "tencent_kline_embedded_qt_index_49")
+
+    def test_volume_ratio_direct_snapshot_ohlc_mismatch_downgrades_to_historical_confirmed(self):
+        fields = make_tencent_qt_fields(overrides={3: "109.99"})
+        quote_text = f'v_sz300274="{"~".join(fields)}";'
+
+        def fake_http(url, **_kwargs):
+            return quote_text if "qt.gtimg.cn" in url else make_tencent_kline_payload(include_qt=False)
+
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", side_effect=fake_http),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value=make_sohu_volume_result()),
+        ):
+            candidate = gdf.fetch_volume_ratio_candidate("300274", "2026-07-14", 15.0)
+        self.assertEqual(candidate["candidate_value"], 1.49)
+        self.assertEqual(candidate["method"], "historical_five_day_volume_cross_check")
+        self.assertEqual(candidate["verification_status"], "confirmed")
+        self.assertEqual(candidate["source"], "sohu_five_day_volume+tencent_five_day_volume")
+        self.assertNotIn("snapshot_ohlc_check", candidate)
+
+    def test_volume_ratio_embedded_snapshot_ohlc_mismatch_downgrades_to_historical_confirmed(self):
+        fields = make_tencent_qt_fields(overrides={3: "109.99"})
+
+        def fake_http(url, **_kwargs):
+            if "qt.gtimg.cn" in url:
+                raise OSError("SSL EOF")
+            return make_tencent_kline_payload(qt_fields=fields)
+
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", side_effect=fake_http),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value=make_sohu_volume_result()),
+        ):
+            candidate = gdf.fetch_volume_ratio_candidate("300274", "2026-07-14", 15.0)
+        self.assertEqual(candidate["method"], "historical_five_day_volume_cross_check")
+        self.assertEqual(candidate["verification_status"], "confirmed")
+        self.assertEqual(candidate["cross_check"]["source"], "tencent_five_day_volume_derived")
+        self.assertNotIn("snapshot_ohlc_check", candidate)
+
+    def test_volume_ratio_snapshot_missing_ohlc_downgrades_to_historical_confirmed(self):
+        fields = make_tencent_qt_fields(overrides={33: ""})
+        quote_text = f'v_sz300274="{"~".join(fields)}";'
+
+        def fake_http(url, **_kwargs):
+            return quote_text if "qt.gtimg.cn" in url else make_tencent_kline_payload(include_qt=False)
+
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", side_effect=fake_http),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value=make_sohu_volume_result()),
+        ):
+            candidate = gdf.fetch_volume_ratio_candidate("300274", "2026-07-14", 15.0)
+        self.assertEqual(candidate["method"], "historical_five_day_volume_cross_check")
+        self.assertEqual(candidate["verification_status"], "confirmed")
+        self.assertNotIn("snapshot_ohlc_check", candidate)
+
+    def test_automatic_cross_check_populates_confirmed_value(self):
+        candidate = {
+            "candidate_value": 1.49,
+            "source": "tencent_qt_index_49+sohu_five_day_volume",
+            "source_date": "2026-07-14",
+            "fetched_at": "2026-07-14T16:00:00Z",
+            "method": "same_day_snapshot_plus_sohu_five_day_cross_check",
+            "confirmed_by": "automation_cross_check",
+            "verification_status": "confirmed",
+            "cross_check": {"value": 1.49, "delta": 0.0, "tolerance": 0.05},
+        }
+        block = gdf.build_volume_ratio_block(
+            existing_volume_ratio=None,
+            candidate=candidate,
+            target_date="2026-07-14",
+            fetched_at="2026-07-14T16:00:00Z",
+        )
+        self.assertEqual(block["confirmed_value"], 1.49)
+        self.assertEqual(block["verification"]["status"], "confirmed")
+        self.assertEqual(block["verification"]["confirmed_by"], "automation_cross_check")
+
+    def test_automatic_cross_check_conflict_remains_unconfirmed(self):
+        fields = make_tencent_qt_fields(volume_ratio="1.70")
+        quote_text = f'v_sz300274="{"~".join(fields)}";'
+        def fake_http(url, **_kwargs):
+            return quote_text if "qt.gtimg.cn" in url else make_tencent_kline_payload(include_qt=False)
+
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", side_effect=fake_http),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value=make_sohu_volume_result()),
+        ):
+            candidate = gdf.fetch_volume_ratio_candidate("300274", "2026-07-14", 15.0)
+        block = gdf.build_volume_ratio_block(
+            existing_volume_ratio=None,
+            candidate=candidate,
+            target_date="2026-07-14",
+            fetched_at="2026-07-14T16:00:00Z",
+        )
+        self.assertEqual(candidate["verification_status"], "conflict")
+        self.assertIsNone(block["confirmed_value"])
+        self.assertEqual(block["verification"]["status"], "conflict")
+
+    def test_volume_ratio_candidate_derives_historical_date_without_reusing_latest_snapshot(self):
+        quote_text = f'v_sz300274="{"~".join(make_tencent_qt_fields())}";'
+
+        def fake_http(url, **_kwargs):
+            return quote_text if "qt.gtimg.cn" in url else make_tencent_kline_payload()
+
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", side_effect=fake_http),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value=make_sohu_volume_result()),
+        ):
+            candidate = gdf.fetch_volume_ratio_candidate("300274", "2026-07-13", 15.0)
+        self.assertEqual(candidate["candidate_value"], 1.25)
+        self.assertEqual(candidate["source_date"], "2026-07-13")
+        self.assertEqual(candidate["method"], "historical_five_day_volume_cross_check")
+        self.assertEqual(candidate["verification_status"], "confirmed")
+        self.assertEqual(candidate["confirmed_by"], "automation_cross_check")
+        self.assertEqual(candidate["cross_check"]["value"], 1.25)
+        self.assertEqual(candidate["cross_check"]["tolerance"], 0.01)
+
+    def test_historical_volume_ratio_cross_check_conflict_stays_unconfirmed(self):
+        quote_text = f'v_sz300274="{"~".join(make_tencent_qt_fields())}";'
+        sohu_result = make_sohu_volume_result()
+        for row in sohu_result["rows"]:
+            if row["date"] == "2026-07-13":
+                row["volume"] = "900000"
+
+        def fake_http(url, **_kwargs):
+            return quote_text if "qt.gtimg.cn" in url else make_tencent_kline_payload()
+
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", side_effect=fake_http),
+            mock.patch.object(gdf, "fetch_sohu_quote", return_value=sohu_result),
+        ):
+            candidate = gdf.fetch_volume_ratio_candidate("300274", "2026-07-13", 15.0)
+        block = gdf.build_volume_ratio_block(
+            existing_volume_ratio=None,
+            candidate=candidate,
+            target_date="2026-07-13",
+            fetched_at="2026-07-15T00:00:00Z",
+        )
+        self.assertEqual(candidate["verification_status"], "conflict")
+        self.assertIsNone(block["confirmed_value"])
+        self.assertEqual(block["verification"]["status"], "conflict")
+
+    def test_historical_volume_ratio_single_source_remains_candidate(self):
+        quote_text = f'v_sz300274="{"~".join(make_tencent_qt_fields())}";'
+
+        def fake_http(url, **_kwargs):
+            return quote_text if "qt.gtimg.cn" in url else make_tencent_kline_payload()
+
+        with (
+            mock.patch.object(gdf, "_http_get_text_direct", side_effect=fake_http),
+            mock.patch.object(
+                gdf,
+                "fetch_sohu_quote",
+                return_value={"status": "network_error", "rows": []},
+            ),
+        ):
+            candidate = gdf.fetch_volume_ratio_candidate("300274", "2026-07-13", 15.0)
+        self.assertEqual(candidate["candidate_value"], 1.25)
+        self.assertEqual(candidate["verification_status"], "candidate")
+        self.assertEqual(candidate["method"], "derived_candidate")
+        self.assertEqual(candidate["source"], "tencent_five_day_volume_derived")
+
+    def test_derive_five_day_volume_ratio_rejects_duplicate_target_date(self):
+        rows = make_sohu_volume_result()["rows"]
+        duplicate_target = [*rows, {"date": "2026-07-14", "volume": "960311"}]
+        self.assertIsNone(gdf.derive_five_day_volume_ratio(duplicate_target, "2026-07-14"))
+
+    def test_derive_five_day_volume_ratio_rejects_duplicate_prior_window_date(self):
+        rows = [
+            {"date": "2026-07-06", "volume": "522306"},
+            {"date": "2026-07-07", "volume": "442203"},
+            {"date": "2026-07-08", "volume": "413086"},
+            {"date": "2026-07-08", "volume": "413086"},
+            {"date": "2026-07-09", "volume": "673516"},
+            {"date": "2026-07-10", "volume": "939380"},
+            {"date": "2026-07-13", "volume": "745683"},
+        ]
+        self.assertIsNone(gdf.derive_five_day_volume_ratio(rows, "2026-07-13"))
+
+    def test_derive_five_day_volume_ratio_keeps_normal_independent_trading_days(self):
+        rows = make_sohu_volume_result()["rows"]
+        self.assertEqual(gdf.derive_five_day_volume_ratio(rows, "2026-07-13"), 1.25)
+        self.assertEqual(gdf.derive_five_day_volume_ratio(rows, "2026-07-14"), 1.49)
+
+    def test_derive_five_day_volume_ratio_requires_five_prior_trading_days(self):
+        rows = make_sohu_volume_result()["rows"][:5]
+        self.assertIsNone(gdf.derive_five_day_volume_ratio(rows, "2026-07-10"))
+
+    def test_main_wires_volume_ratio_candidate_provider(self):
+        outcome = gdf.RunOutcome(
+            exit_code=gdf.EXIT_PARTIAL,
+            facts_pack={"run": {"source_used": "tencent"}},
+            wrote_file=False,
+            output_path=None,
+            status="partial",
+        )
+        argv = [
+            "--symbol",
+            "300274",
+            "--date",
+            "2026-07-14",
+            "--output",
+            "/tmp/facts.json",
+            "--no-write",
+        ]
+        with mock.patch.object(gdf, "run", return_value=outcome) as run_mock:
+            with contextlib.redirect_stdout(io.StringIO()):
+                gdf.main(argv)
+        self.assertIs(
+            run_mock.call_args.kwargs["volume_ratio_candidate_provider"],
+            gdf.fetch_volume_ratio_candidate,
+        )
+
     def test_network_failure_exit_and_no_write(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "facts.json"

@@ -1,18 +1,20 @@
 """
-A 股复盘行情取数通道 v0.1
+A 股复盘行情基准校准工具 v0.1（legacy benchmark diagnostic）
 
 用途：
-- 用腾讯行情作为主数据源查询 A 股日线数据
+- 仅校验 2026-07-06 / 300274 的冻结同花顺人工基准
+- 用腾讯行情作为主数据源查询该基准日 A 股日线数据
 - 东方财富仅作为 optional diagnostic source，失败不中断主流程
 - 与同花顺人工数据做字段对比
-- 只在终端打印结果，不写入任何文件
+- 可选输出该基准日的最小 facts JSON
+- 任意其他交易日使用 tools/generate_daily_facts.py
 - 不做交易，不生成买卖建议
 
 数据源口径：
 - 腾讯行情：默认主数据源（通过 AKShare stock_zh_a_daily 接口）
 - 东方财富：optional diagnostic source（通过 AKShare stock_zh_a_hist 接口），失败不影响主流程
 - 同花顺人工数据仍是当前可信基准
-- 本脚本只读查询，不做交易
+- 本脚本不作为每日多日期抓取入口
 """
 
 import argparse
@@ -26,7 +28,7 @@ from urllib.request import Request, urlopen
 # 同花顺人工基准数据
 BENCHMARK_SYMBOL = "300274"
 THS_BENCHMARK = {
-    # 当前人工基准对应 2026-07-06；后续每日复盘若切换日期，需同步更新这里
+    # 冻结的 2026-07-06 回归基准；不得为每日抓取滚动修改
     "日期": "2026-07-06",
     "股票代码": BENCHMARK_SYMBOL,
     "股票名称": "阳光电源",
@@ -43,6 +45,11 @@ THS_BENCHMARK = {
     "成交量_手": 574468,
     "量比": 0.55,
 }
+
+EXIT_OK = 0
+EXIT_USAGE_ERROR = 2
+EXIT_DEPENDENCY_ERROR = 3
+EXIT_SOURCE_ERROR = 4
 
 # 对比容差
 TOLERANCE = {
@@ -80,10 +87,17 @@ TENCENT_FIELD_MAP = {
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="A 股复盘行情取数通道 v0.1 — 腾讯行情主数据源，东方财富 diagnostic"
+        description=(
+            "A 股 2026-07-06 同花顺基准校准工具（legacy；"
+            "多日期请使用 tools/generate_daily_facts.py）"
+        )
     )
     parser.add_argument("--symbol", default="300274", help="股票代码，默认 300274")
-    parser.add_argument("--date", default=THS_BENCHMARK["日期"], help="查询日期，默认当前人工基准日期")
+    parser.add_argument(
+        "--date",
+        default=THS_BENCHMARK["日期"],
+        help="校准日期；仅支持冻结基准 2026-07-06",
+    )
     parser.add_argument("--period", default="daily", help="周期，默认 daily")
     parser.add_argument("--adjust", default="", help="复权类型，默认空字符串")
     parser.add_argument("--output-json", default=None, help="可选输出最小 facts JSON 的路径")
@@ -485,11 +499,11 @@ def fetch_eastmoney_data(ak, symbol, date_str, period, adjust):
     return data, None
 
 
-def main():
+def main() -> int:
     args = parse_args()
 
     print("=" * 60)
-    print("A 股复盘行情取数通道 v0.1")
+    print("A 股复盘行情基准校准工具 v0.1")
     print("=" * 60)
     print(f"标的: {args.symbol}")
     print(f"日期: {args.date}")
@@ -502,26 +516,26 @@ def main():
     # ============================================================
     benchmark_date = THS_BENCHMARK["日期"]
     if args.date != benchmark_date:
-        print(f"警告：当前基准数据对应日期为 {benchmark_date}，")
-        print(f"但 --date 传入的是 {args.date}，对比结果无意义。")
-        print(f"请更新 THS_BENCHMARK 后再运行，或使用 --date {benchmark_date}。")
+        print(f"错误：本脚本仅用于 {benchmark_date} 同花顺基准校准。")
+        print(f"--date 传入的是 {args.date}，不能与冻结基准混用。")
+        print("其他日期请使用 tools/generate_daily_facts.py。")
         print()
         print("日期不匹配，未发起任何联网请求。")
-        return
+        return EXIT_USAGE_ERROR
 
     if args.output_json and args.symbol != BENCHMARK_SYMBOL:
         print("错误：当前 facts JSON MVP 只支持 THS_BENCHMARK 对应标的。")
         print(f"requested symbol: {args.symbol}")
         print(f"benchmark symbol: {BENCHMARK_SYMBOL}")
-        print("若要支持多票，需要后续引入 per-symbol benchmark/config，不得临时混用当前 THS_BENCHMARK。")
-        return
+        print("其他标的或日期请使用正式 facts pack 生成链路，不得混用当前冻结基准。")
+        return EXIT_USAGE_ERROR
 
     # 导入 akshare
     try:
         import akshare as ak
     except ImportError:
         print("akshare 未安装。当前脚本不会自动安装依赖。请人工确认后再决定是否安装。")
-        return
+        return EXIT_DEPENDENCY_ERROR
 
     date_str = args.date.replace("-", "")
 
@@ -559,7 +573,7 @@ def main():
         print("主数据源（腾讯行情）失败，无法进行对比。")
         print("东方财富仅为 diagnostic source，不替代主链。")
         print(f"失败原因：{tencent_err}")
-        return
+        return EXIT_SOURCE_ERROR
 
     # 腾讯日线未提供原始涨跌幅时，优先用收盘 / 昨收派生，避免 known-missing 字段导致主流程失败
     if tencent_data.get("涨跌幅") is None:
@@ -677,6 +691,8 @@ def main():
         print()
         print(f"facts JSON 已写入: {args.output_json}")
 
+    return EXIT_OK
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
