@@ -141,9 +141,9 @@ Phase 1 先做三件事：
 
 当前已完成的前置成果：
 
-- `tools/akshare_daily_quote_check_v0.1.py` 已具备最小 facts JSON 输出能力。
+- `tools/akshare_daily_quote_check_v0.1.py` 已完成 `2026-07-06` 最小 facts JSON 试跑，现冻结为同花顺人工基准校准 / 回归工具。
 - `data/daily/300274_2026-07-06_facts.json` 已完成一次正式试跑并进入 07-06 复盘链路。
-- 后续 `fetch_daily_quote.py` / facts pack 正式化，应优先承接现有 quote check 脚本，不急于新开平行脚本，避免职责重叠。
+- `tools/generate_daily_facts.py` 已承接正式多日期 facts pack 生成；后续行情源、字段和确认规则统一扩展该脚本，不再让 legacy quote check 承接每日抓取。
 
 ## 四、总控室建议的保留部分
 
@@ -320,11 +320,11 @@ Fable 从上下文抽出来的 150 / 145 / 138.61 / 127.30 / 127.18 / 126.10 只
 
 目标：
 
-- `fetch_daily_quote.py` / facts pack 正式化
-- 目标是承接现有 `tools/akshare_daily_quote_check_v0.1.py` 的最小 facts JSON 输出能力
-- 将单日人工基准模式逐步演进为更稳定的 facts pack 生成链路
+- 继续正式化 `tools/generate_daily_facts.py` 的多日期 facts pack 生成链路
+- 保留 `tools/akshare_daily_quote_check_v0.1.py` 作为 `2026-07-06` 冻结基准回归样本，不滚动更新其人工基准
+- 在正式生成器上继续补齐稳定性和字段证据链
 - 接上更完整的行情源 / 配置化 benchmark / 缺失字段管理
-- 注意：截至 2026-07-06 复盘链路，最小 facts JSON 输出已经完成并实战试跑；Week 3 的含义是“正式化和扩展”，不是从零开始写第二套抓行情脚本。
+- 注意：最小 facts JSON 与多日期正式生成器均已落地；Week 3 的含义是继续扩展 `generate_daily_facts.py`，不是从 legacy 校准脚本另起第二条生产主链。
 
 ## 八、Phase 1 的建议目录
 

@@ -199,7 +199,7 @@
 
 - 这部分最容易碰字段坑、接口差异、代理问题
 - 所以放在前面的校验和身份逻辑之后更稳
-- 现有 `tools/akshare_daily_quote_check_v0.1.py` 是 `fetch_daily_quote.py` 的前身 / 试验版；后续优先基于现有脚本演进，不急于新开平行脚本，避免职责重叠。
+- `tools/akshare_daily_quote_check_v0.1.py` 已冻结为 `2026-07-06` 同花顺人工基准校准 / 回归样本，不作为多日期抓取入口；正式每日 facts pack 入口为 `tools/generate_daily_facts.py`，后续行情源、字段和确认规则统一在该脚本演进，避免双主链。
 
 ## 六、facts pack 和 levels.json 要分离
 
@@ -431,7 +431,7 @@
 
 注：`validate_review_chain.py` 和 `seal_check.py` 同级优先。前者拦截文本口径和事实一致性问题，后者拦截 git / staged / untracked / rename 半状态问题；二者都属于每日复盘链的第一批闸门。
 
-`tools/akshare_daily_quote_check_v0.1.py` 是 `fetch_daily_quote.py` 的前身 / 试验版；后续优先基于现有脚本演进，不急于新开平行脚本，避免职责重叠。
+`tools/akshare_daily_quote_check_v0.1.py` 保留为 `2026-07-06` 冻结基准的诊断 / 回归工具，不滚动修改基准日期，也不承接其他交易日；正式多日期 facts pack 由 `tools/generate_daily_facts.py` 生成，后续只扩展这一条生产主链。
 
 ### Phase 2
 
