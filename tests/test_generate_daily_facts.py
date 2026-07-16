@@ -1222,6 +1222,25 @@ class GenerateDailyFactsTests(unittest.TestCase):
         self.assertEqual(exit_code, gdf.EXIT_SUCCESS)
         self.assertIn('"quote"', stdout)
         self.assertIn('"volume_ratio"', stdout)
+        self.assertNotIn(gdf.CANDIDATE_STDOUT_MARKER, stdout)
+
+        exit_code, stdout = run_main(
+            [
+                "--symbol",
+                "300274",
+                "--date",
+                "2026-07-10",
+                "--output",
+                "/tmp/facts.json",
+                "--dry-run",
+                "--emit-runner-marker",
+            ],
+            sample_outcome,
+        )
+        marker_lines = [line for line in stdout.splitlines() if line.startswith(gdf.CANDIDATE_STDOUT_MARKER)]
+        self.assertEqual(exit_code, gdf.EXIT_SUCCESS)
+        self.assertEqual(len(marker_lines), 1)
+        self.assertEqual(json.loads(marker_lines[0][len(gdf.CANDIDATE_STDOUT_MARKER) :]), sample_pack)
 
         exit_code, stdout = run_main(["--symbol", "300274", "--date", "2026-07-10", "--output", "/tmp/facts.json", "--no-write"], sample_outcome)
         self.assertEqual(exit_code, gdf.EXIT_SUCCESS)

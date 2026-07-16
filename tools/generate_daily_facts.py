@@ -41,6 +41,7 @@ EXIT_NETWORK_ERROR = 3
 EXIT_SOURCE_ERROR = 4
 EXIT_SCHEMA_ERROR = 5
 EXIT_DATE_MISMATCH = 6
+CANDIDATE_STDOUT_MARKER = "STOCKS_FACTS_CANDIDATE_JSON="
 
 CORE_QUOTE_FIELDS = (
     "open",
@@ -247,6 +248,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Historical quote source route",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print JSON and status without writing")
+    parser.add_argument(
+        "--emit-runner-marker",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--no-write", action="store_true", help="Do not write output file")
     parser.add_argument(
         "--write-partial",
@@ -2072,6 +2078,11 @@ def main(argv: list[str] | None = None) -> int:
     outcome = run(args, volume_ratio_candidate_provider=fetch_volume_ratio_candidate)
     if args.dry_run:
         print(json.dumps(outcome.facts_pack, ensure_ascii=False, indent=2))
+        if args.emit_runner_marker and isinstance(outcome.facts_pack, dict):
+            print(
+                CANDIDATE_STDOUT_MARKER
+                + json.dumps(outcome.facts_pack, ensure_ascii=False, separators=(",", ":"))
+            )
     elif args.no_write:
         print(
             json.dumps(
