@@ -3,35 +3,53 @@ import json
 import threading
 import time
 from contextlib import contextmanager
-from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
 
-from tools import generate_daily_facts as gdf
 from tools import official_facts_lock as ofl
+from tools import official_facts_transaction as oft
 
 
-FIXTURE_ROOT = Path(__file__).resolve().parent / "fixtures" / "daily_facts"
-
-
-def generator_args(output: Path) -> SimpleNamespace:
-    return SimpleNamespace(
-        symbol="300274",
-        date="2026-07-10",
-        output=str(output),
-        source="tencent",
-        dry_run=False,
-        no_write=False,
-        write_partial=True,
-        timeout=1.0,
-    )
-
-
-def generator_quote(name: str) -> dict:
-    payload = json.loads((FIXTURE_ROOT / "tencent_quote_0710.json").read_text(encoding="utf-8"))
-    payload["source_name"] = name
-    return payload
+def transaction_candidate(name: str) -> dict:
+    return {
+        "schema_version": "facts_pack_v0.2",
+        "trade_date": "2026-07-10",
+        "symbol": "300274",
+        "name": name,
+        "quote": {
+            "open": 123.17,
+            "high": 123.8,
+            "low": 114.0,
+            "close": 114.79,
+            "prev_close": 124.01,
+            "pct_change": -7.434884283525522,
+            "amount": 111.28,
+            "turnover_rate": 5.92,
+        },
+        "quote_verification": {"status": "confirmed", "source_date": "2026-07-10"},
+        "volume_ratio": {
+            "candidate_value": 1.79,
+            "confirmed_value": 1.79,
+            "source": "manual_check",
+            "verification": {"status": "manual_confirmed", "method": "legacy_manual_confirmation"},
+            "manual_verification": {
+                "decided_by": "pytest",
+                "decided_at": "2026-07-10T16:00:00Z",
+                "source": "pytest",
+                "reason": "transaction test",
+            },
+        },
+        "missing": {"market_indices": None, "sector_context": None, "disclosure_status": None, "news_policy_context": None},
+        "needs_manual_check": {
+            "volume_ratio": False,
+            "market_indices": False,
+            "sector_context": False,
+            "disclosure_status": False,
+            "news_policy_context": False,
+        },
+        "run": {"status": "success"},
+    }
 
 
 def generator_write(
@@ -40,17 +58,20 @@ def generator_write(
     expected_sha256: str | None,
     name: str,
     lock_dir: Path,
-) -> str | None:
-    _facts, _status, wrote, final_sha = gdf.write_generated_facts_transaction(
-        args=generator_args(official),
-        output_path=official,
-        quote_result=generator_quote(name),
-        volume_ratio_candidate=None,
+) -> tuple[bool, str | None]:
+    candidate = transaction_candidate(name)
+    result = oft.promote_candidate_to_official(
+        repo_root=official.parent,
+        official_path=official,
+        candidate=candidate,
+        candidate_bytes=oft.json_bytes(candidate),
+        symbol="300274",
+        target_date="2026-07-10",
         expected_sha256=expected_sha256,
         lock_dir=lock_dir,
+        enforce_canonical_path=False,
     )
-    assert wrote
-    return final_sha
+    return result.write_action in {"created", "identical_noop"}, result.official_sha256_after
 
 
 def write_json(path: Path, payload: dict) -> str:
@@ -77,16 +98,37 @@ def test_lock_path_uses_absolute_path_hash_and_persistent_lock_file(tmp_path: Pa
         pass
 
 
+def test_canonical_official_path_is_symbol_date_derived_and_rejects_traversal(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    expected = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    assert oft.canonical_official_path(repo, "300274", "2026-07-16") == expected
+    with pytest.raises(ValueError):
+        oft.canonical_official_path(repo, "../300274", "2026-07-16")
+    with pytest.raises(ValueError):
+        oft.canonical_official_path(repo, "300274", "../2026-07-16")
+
+
+def test_official_symlink_target_is_rejected(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    daily = repo / "data" / "daily"
+    daily.mkdir(parents=True)
+    outside = tmp_path / "outside.json"
+    official = daily / "300274_2026-07-16_facts.json"
+    official.symlink_to(outside)
+    with pytest.raises(ValueError, match="escapes repository|symlink"):
+        oft.validate_official_path(official, repo, "300274", "2026-07-16")
+
+
 def test_two_compliant_writers_serialize_and_second_stale_sha_stops(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     official = tmp_path / "official.json"
     lock_dir = tmp_path / "locks"
-    old_sha = write_json(official, {"symbol": "300274", "trade_date": "2026-07-10", "name": "old"})
+    old_sha = None
     first_at_replace = threading.Event()
     release_first = threading.Event()
-    original_replace = gdf.os.replace
+    original_replace = oft.os.replace
 
     def delayed_replace(src, dst):
         if threading.current_thread().name == "first-writer" and Path(dst) == official:
@@ -94,26 +136,29 @@ def test_two_compliant_writers_serialize_and_second_stale_sha_stops(
             assert release_first.wait(5)
         return original_replace(src, dst)
 
-    monkeypatch.setattr(gdf.os, "replace", delayed_replace)
+    monkeypatch.setattr(oft.os, "replace", delayed_replace)
     results: dict[str, object] = {}
 
     def first_writer() -> None:
-        results["first_sha"] = generator_write(
+        wrote, sha = generator_write(
             official,
             expected_sha256=old_sha,
             name="first",
             lock_dir=lock_dir,
         )
+        assert wrote
+        results["first_sha"] = sha
         results["first"] = "written"
 
     def second_writer() -> None:
         try:
-            generator_write(
+            wrote, _sha = generator_write(
                 official,
                 expected_sha256=old_sha,
                 name="second",
                 lock_dir=lock_dir,
             )
+            results["second"] = "blocked" if not wrote else "written"
         except Exception as exc:  # asserted below
             results["second"] = exc
 
@@ -129,7 +174,7 @@ def test_two_compliant_writers_serialize_and_second_stale_sha_stops(
     second.join(5)
 
     assert results["first"] == "written"
-    assert isinstance(results["second"], ofl.OfficialFactsChangedError)
+    assert results["second"] == "blocked"
     assert json.loads(official.read_text(encoding="utf-8"))["name"] == "first"
     assert results["first_sha"] == ofl.sha256_file(official)
     assert not list(tmp_path.glob("*.tmp"))
@@ -146,29 +191,26 @@ def test_writer_exception_cleans_temp_and_next_writer_can_lock(
     old_sha = write_json(official, old_payload)
 
     with monkeypatch.context() as context:
-        context.setattr(
-            gdf,
-            "validate_generated_facts_pack",
-            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("write stopped")),
-        )
+        context.setattr(oft.os, "replace", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("write stopped")))
         with pytest.raises(RuntimeError, match="write stopped"):
             generator_write(
-                official,
-                expected_sha256=old_sha,
+                tmp_path / "new_official.json",
+                expected_sha256=None,
                 name="failed",
                 lock_dir=lock_dir,
             )
 
     assert json.loads(official.read_text(encoding="utf-8")) == old_payload
-    assert not [path for path in tmp_path.iterdir() if path.name.startswith(".official.json.")]
+    assert not [path for path in tmp_path.iterdir() if path.name.endswith(".tmp")]
     assert not list(tmp_path.glob("*.lock"))
-    generator_write(
+    wrote, _sha = generator_write(
         official,
         expected_sha256=old_sha,
         name="next",
         lock_dir=lock_dir,
     )
-    assert json.loads(official.read_text(encoding="utf-8"))["name"] == "next"
+    assert not wrote
+    assert json.loads(official.read_text(encoding="utf-8")) == old_payload
 
 
 def test_generator_full_transaction_actions_observe_held_lock(
@@ -177,10 +219,7 @@ def test_generator_full_transaction_actions_observe_held_lock(
 ) -> None:
     official = tmp_path / "official.json"
     lock_dir = tmp_path / "locks"
-    old_sha = write_json(
-        official,
-        {"symbol": "300274", "trade_date": "2026-07-10", "name": "old"},
-    )
+    old_sha = None
     holder: dict[str, object] = {}
     events: list[str] = []
     real_lock = ofl.official_facts_lock
@@ -202,31 +241,18 @@ def test_generator_full_transaction_actions_observe_held_lock(
 
     real_read = ofl.read_current_official
     real_sha = ofl.sha256_bytes
-    real_parse = gdf.parse_existing_official_bytes
-    real_build = gdf.build_facts_pack
-    real_validate = gdf.validate_generated_facts_pack
-    real_temp = gdf.tempfile.NamedTemporaryFile
-    real_replace = gdf.os.replace
+    real_temp = oft.tempfile.NamedTemporaryFile
+    real_replace = oft.os.replace
 
     def observed_read(*args, **kwargs):
         mark("read_official")
         return real_read(*args, **kwargs)
 
     def observed_sha(data):
-        mark("sha256")
+        state = holder.get("state")
+        if isinstance(state, ofl.OfficialFactsLockState) and state.held:
+            mark("sha256")
         return real_sha(data)
-
-    def observed_parse(*args, **kwargs):
-        mark("parse_official")
-        return real_parse(*args, **kwargs)
-
-    def observed_build(*args, **kwargs):
-        mark("build_final")
-        return real_build(*args, **kwargs)
-
-    def observed_validate(*args, **kwargs):
-        mark("validator")
-        return real_validate(*args, **kwargs)
 
     def observed_temp(*args, **kwargs):
         mark("temp_write")
@@ -239,26 +265,21 @@ def test_generator_full_transaction_actions_observe_held_lock(
     monkeypatch.setattr(ofl, "official_facts_lock", observed_lock)
     monkeypatch.setattr(ofl, "read_current_official", observed_read)
     monkeypatch.setattr(ofl, "sha256_bytes", observed_sha)
-    monkeypatch.setattr(gdf, "parse_existing_official_bytes", observed_parse)
-    monkeypatch.setattr(gdf, "build_facts_pack", observed_build)
-    monkeypatch.setattr(gdf, "validate_generated_facts_pack", observed_validate)
-    monkeypatch.setattr(gdf.tempfile, "NamedTemporaryFile", observed_temp)
-    monkeypatch.setattr(gdf.os, "replace", observed_replace)
+    monkeypatch.setattr(oft.tempfile, "NamedTemporaryFile", observed_temp)
+    monkeypatch.setattr(oft.os, "replace", observed_replace)
 
-    final_sha = generator_write(
+    wrote, final_sha = generator_write(
         official,
         expected_sha256=old_sha,
         name="locked result",
         lock_dir=lock_dir,
     )
+    assert wrote
     assert final_sha is not None
     assert events[0] == "lock_enter" and events[-1] == "lock_exit"
     for required in (
         "read_official",
         "sha256",
-        "parse_official",
-        "build_final",
-        "validator",
         "temp_write",
         "replace",
     ):

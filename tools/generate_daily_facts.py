@@ -28,6 +28,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools import official_facts_lock as ofl
+from tools import official_facts_transaction as oft
 from tools import validate_review_chain as vrc
 from tools import volume_ratio_evidence as vre
 
@@ -240,7 +241,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--symbol", required=True, help="Stock symbol, e.g. 300274")
     parser.add_argument("--date", required=True, help="Target trade date in YYYY-MM-DD")
-    parser.add_argument("--output", required=True, help="Output JSON path")
+    parser.add_argument("--output", help="Candidate/non-official output JSON path; never used as an official target")
     parser.add_argument(
         "--source",
         choices=("auto", "tencent", "eastmoney"),
@@ -254,6 +255,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=argparse.SUPPRESS,
     )
     parser.add_argument("--no-write", action="store_true", help="Do not write output file")
+    parser.add_argument(
+        "--write-official",
+        action="store_true",
+        help="Explicitly write canonical official facts to data/daily/<symbol>_<date>_facts.json",
+    )
     parser.add_argument(
         "--write-partial",
         action="store_true",
@@ -269,7 +275,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--lock-dir",
         help="Override the shared official-facts lock directory (tests only)",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    selected_modes = sum(bool(value) for value in (args.dry_run, args.no_write, args.write_official))
+    if selected_modes > 1:
+        parser.error("choose at most one of --dry-run, --no-write, or --write-official")
+    if args.write_official and args.output:
+        parser.error("--write-official derives the official path from --symbol and --date; do not pass --output")
+    if not args.write_official and not args.output:
+        parser.error("--output is required unless --write-official is used")
+    return args
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -1674,10 +1688,9 @@ def parse_existing_official_bytes(
     if data is None:
         return None
     try:
-        pack = json.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return oft.parse_official_bytes(data, symbol=symbol, target_date=target_date)
+    except ValueError as exc:
         raise ValueError(f"schema_error: output JSON is invalid: {exc}") from exc
-    return _validate_existing_pack(pack, symbol, target_date)
 
 
 def snapshot_expected_official_sha(
@@ -1779,62 +1792,77 @@ def write_generated_facts_transaction(
 ) -> tuple[dict[str, Any], str, bool, str | None]:
     """Build, validate, and write final generator facts under one held lock."""
 
-    with ofl.official_facts_lock(output_path, lock_dir=lock_dir) as lock_state:
-        official_bytes, _actual_sha256 = ofl.read_locked_official(
-            output_path,
-            expected_sha256=expected_sha256,
-            lock_state=lock_state,
-        )
-        existing_pack = parse_existing_official_bytes(
-            official_bytes,
-            symbol=args.symbol,
-            target_date=args.date,
-        )
-        facts_pack = build_facts_pack(
-            args=args,
-            quote_result=quote_result,
-            existing_pack=existing_pack,
-            volume_ratio_candidate=volume_ratio_candidate,
-        )
-        run_status = compute_final_run_status(facts_pack)
-        facts_pack["run"]["status"] = run_status
-
-        quote_complete = all(
-            facts_pack["quote"].get(field) is not None
-            for field in (
-                "open",
-                "high",
-                "low",
-                "close",
-                "prev_close",
-                "amount",
-                "turnover_rate",
-            )
-        )
-        should_write = True
-        if args.dry_run or args.no_write:
-            should_write = False
-        elif run_status in {"network_error", "source_error", "schema_error", "date_mismatch"}:
-            should_write = False
-        elif not quote_complete and not args.write_partial:
-            should_write = False
-        elif not _has_any_core_field(facts_pack["quote"]):
-            should_write = False
-
-        final_sha256 = None
-        if should_write:
-            validate_generated_facts_pack(
-                facts_pack,
-                output_path=output_path,
-                target_date=args.date,
-            )
-            final_sha256 = _write_generated_bytes_locked(
+    write_official = bool(getattr(args, "write_official", False))
+    if write_official:
+        with ofl.official_facts_lock(output_path, lock_dir=lock_dir) as lock_state:
+            official_bytes, _actual_sha256 = ofl.read_locked_official(
                 output_path,
-                json_bytes(facts_pack),
                 expected_sha256=expected_sha256,
                 lock_state=lock_state,
             )
-        return facts_pack, run_status, should_write, final_sha256
+            existing_pack = parse_existing_official_bytes(
+                official_bytes,
+                symbol=args.symbol,
+                target_date=args.date,
+            )
+    elif output_path.exists():
+        existing_pack = _validate_existing_pack(load_json(output_path), args.symbol, args.date)
+    else:
+        existing_pack = None
+    facts_pack = build_facts_pack(
+        args=args,
+        quote_result=quote_result,
+        existing_pack=existing_pack,
+        volume_ratio_candidate=volume_ratio_candidate,
+    )
+    run_status = compute_final_run_status(facts_pack)
+    facts_pack["run"]["status"] = run_status
+
+    quote_complete = all(
+        facts_pack["quote"].get(field) is not None
+        for field in (
+            "open",
+            "high",
+            "low",
+            "close",
+            "prev_close",
+            "amount",
+            "turnover_rate",
+        )
+    )
+    should_write = True
+    if args.dry_run or args.no_write:
+        should_write = False
+    elif run_status in {"network_error", "source_error", "schema_error", "date_mismatch"}:
+        should_write = False
+    elif not quote_complete and not args.write_partial:
+        should_write = False
+    elif not _has_any_core_field(facts_pack["quote"]):
+        should_write = False
+
+    final_sha256 = None
+    if should_write and write_official:
+        validate_generated_facts_pack(
+            facts_pack,
+            output_path=output_path,
+            target_date=args.date,
+        )
+        result = oft.promote_candidate_to_official(
+            repo_root=REPO_ROOT,
+            official_path=output_path,
+            candidate=facts_pack,
+            candidate_bytes=json_bytes(facts_pack),
+            symbol=args.symbol,
+            target_date=args.date,
+            expected_sha256=expected_sha256,
+            lock_dir=lock_dir,
+            enforce_canonical_path=True,
+        )
+        should_write = result.write_action in {"created", "identical_noop"}
+        final_sha256 = result.official_sha256_after
+    elif should_write:
+        should_write = False
+    return facts_pack, run_status, should_write, final_sha256
 
 
 def _load_akshare_client() -> Any:
@@ -1976,7 +2004,44 @@ def run(
     volume_ratio_candidate_provider: Callable[[str, str, float], dict[str, Any] | None] | None = None,
     ak_client: Any | None = None,
 ) -> RunOutcome:
-    output_path = Path(args.output)
+    write_official = bool(getattr(args, "write_official", False))
+    if write_official:
+        try:
+            output_path = oft.canonical_official_path(REPO_ROOT, args.symbol, args.date)
+            oft.validate_official_path(output_path, REPO_ROOT, args.symbol, args.date)
+        except ValueError:
+            return RunOutcome(
+                exit_code=EXIT_SCHEMA_ERROR,
+                facts_pack=None,
+                wrote_file=False,
+                output_path=None,
+                status="schema_error",
+            )
+    else:
+        output_path = Path(args.output)
+        try:
+            canonical = oft.canonical_official_path(REPO_ROOT, args.symbol, args.date)
+        except ValueError:
+            canonical = None
+        if canonical is not None and output_path.expanduser().resolve(strict=False) == canonical.resolve(strict=False):
+            return RunOutcome(
+                exit_code=EXIT_SCHEMA_ERROR,
+                facts_pack=None,
+                wrote_file=False,
+                output_path=None,
+                status="schema_error",
+            )
+        if output_path.exists():
+            try:
+                _validate_existing_pack(load_json(output_path), args.symbol, args.date)
+            except (OSError, json.JSONDecodeError, ValueError):
+                return RunOutcome(
+                    exit_code=EXIT_SCHEMA_ERROR,
+                    facts_pack=None,
+                    wrote_file=False,
+                    output_path=str(output_path),
+                    status="schema_error",
+                )
     if getattr(args, "timeout", 0) <= 0:
         return RunOutcome(
             exit_code=EXIT_SCHEMA_ERROR,
@@ -1987,11 +2052,15 @@ def run(
         )
     lock_dir = Path(args.lock_dir) if getattr(args, "lock_dir", None) else None
     try:
-        expected_output_sha256 = snapshot_expected_official_sha(
-            output_path,
-            symbol=args.symbol,
-            target_date=args.date,
-            lock_dir=lock_dir,
+        expected_output_sha256 = (
+            snapshot_expected_official_sha(
+                output_path,
+                symbol=args.symbol,
+                target_date=args.date,
+                lock_dir=lock_dir,
+            )
+            if write_official
+            else None
         )
     except ValueError as exc:
         message = str(exc)

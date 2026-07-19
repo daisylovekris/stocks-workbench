@@ -2,6 +2,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -48,6 +50,65 @@ def parse_args(tmp_path: Path, calendar: Path, *extra: str):
         *extra,
     ]
     return runner.build_parser().parse_args(argv)
+
+
+def parse_write_args(tmp_path: Path, calendar: Path, *extra: str):
+    argv = [
+        "--write-official",
+        "--symbol",
+        "300274",
+        "--runtime-dir",
+        str(tmp_path / "runtime"),
+        "--calendar",
+        str(calendar),
+        *extra,
+    ]
+    return runner.build_parser().parse_args(argv)
+
+
+def install_temp_repo_root(monkeypatch, tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    (repo / "data" / "daily").mkdir(parents=True)
+    monkeypatch.setattr(runner, "REPO_ROOT", repo)
+    return repo
+
+
+def eligible_official_candidate(*, status: str = "success", source_date: str = "2026-07-16") -> dict:
+    candidate = generator_object(status=status, source_date=source_date)
+    candidate["quote_verification"]["status"] = "confirmed"
+    candidate["volume_ratio"] = {
+        "candidate_value": 1.2,
+        "confirmed_value": 1.2,
+        "verification": {
+            "status": "manual_confirmed",
+            "method": "legacy_manual_confirmation",
+            "source_date": source_date,
+        },
+        "manual_verification": {
+            "decided_by": "pytest",
+            "decided_at": "2026-07-16T16:00:00Z",
+            "source": "pytest",
+            "reason": "controlled test fixture",
+        },
+    }
+    candidate["needs_manual_check"] = {
+        "volume_ratio": False,
+        "market_indices": status == "partial",
+        "sector_context": status == "partial",
+        "disclosure_status": status == "partial",
+        "news_policy_context": status == "partial",
+    }
+    candidate["missing"] = {
+        "market_indices": None,
+        "sector_context": None,
+        "disclosure_status": None,
+        "news_policy_context": None,
+    }
+    return candidate
+
+
+def marker_for(candidate: dict) -> str:
+    return runner.CANDIDATE_STDOUT_MARKER + json.dumps(candidate, ensure_ascii=False, separators=(",", ":"))
 
 
 def generator_object(
@@ -107,6 +168,15 @@ def patch_validator(monkeypatch, *, status: str = "passed"):
         return {"status": "passed"}
 
     monkeypatch.setattr(runner, "validator_summary", fake_validator)
+
+
+def patch_official_validator(monkeypatch, *, status: str = "passed"):
+    def fake_official_validator(candidate, *, official_path, target_date, validator=None):  # noqa: ARG001
+        if status == "failed":
+            return {"status": "failed", "exception_type": "ValueError", "message": "official validator failed"}
+        return {"status": "passed"}
+
+    monkeypatch.setattr(runner.oft, "_validator_summary", fake_official_validator)
 
 
 def load_manifest(manifest: dict) -> dict:
@@ -388,8 +458,8 @@ def test_existing_formal_success_record_skips_already_completed(tmp_path, monkey
     )
 
     assert code == 0
-    assert load_manifest(manifest)["reason_code"] == "already_completed"
-    assert calls == []
+    assert load_manifest(manifest)["outcome"] == "success"
+    assert calls
 
 
 def test_previous_partial_record_allows_rerun_and_records_previous_run_id(tmp_path, monkeypatch):
@@ -412,7 +482,8 @@ def test_previous_partial_record_allows_rerun_and_records_previous_run_id(tmp_pa
 
 def test_sealed_facts_exists_skips(tmp_path, monkeypatch):
     calendar = write_calendar(tmp_path / "calendar.json")
-    official = tmp_path / "official.json"
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
     official.write_text(json.dumps({"sealed": True}), encoding="utf-8")
     calls = patch_generator(monkeypatch)
 
@@ -422,8 +493,6 @@ def test_sealed_facts_exists_skips(tmp_path, monkeypatch):
             calendar,
             "--now",
             "2026-07-16T15:25:00+08:00",
-            "--official-path",
-            str(official),
         )
     )
 
@@ -516,19 +585,39 @@ def test_dry_run_artifacts_stay_outside_data_daily(tmp_path, monkeypatch):
 def test_main_without_dry_run_is_rejected(tmp_path, capsys):
     calendar = write_calendar(tmp_path / "calendar.json")
 
-    code = runner.main(
-        [
-            "--runtime-dir",
-            str(tmp_path / "runtime"),
-            "--calendar",
-            str(calendar),
-            "--now",
-            "2026-07-16T15:25:00+08:00",
-        ]
-    )
+    with pytest.raises(SystemExit) as exc:
+        runner.main(
+            [
+                "--runtime-dir",
+                str(tmp_path / "runtime"),
+                "--calendar",
+                str(calendar),
+                "--now",
+                "2026-07-16T15:25:00+08:00",
+            ]
+        )
 
-    assert code == 1
-    assert "Phase A only supports --dry-run" in capsys.readouterr().err
+    assert exc.value.code == 2
+    assert "one of the arguments --dry-run --write-official is required" in capsys.readouterr().err
+
+
+def test_cli_rejects_dry_run_and_write_official_together(tmp_path, capsys):
+    calendar = write_calendar(tmp_path / "calendar.json")
+
+    with pytest.raises(SystemExit) as exc:
+        runner.main(
+            [
+                "--dry-run",
+                "--write-official",
+                "--runtime-dir",
+                str(tmp_path / "runtime"),
+                "--calendar",
+                str(calendar),
+            ]
+        )
+
+    assert exc.value.code == 2
+    assert "not allowed with argument" in capsys.readouterr().err
 
 
 def git_status_paths() -> list[str]:
@@ -683,8 +772,559 @@ def test_matching_formal_success_completes_but_previous_is_latest_record(tmp_pat
         mode="today_after_close",
     )
 
-    assert reason == "already_completed"
+    assert reason is None
     assert previous == "later"
+
+
+def test_write_official_with_now_is_rejected(tmp_path):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-16",
+        "--reason",
+        "controlled replay",
+        "--now",
+        "2026-07-16T15:25:00+08:00",
+    )
+
+    with pytest.raises(runner.RunnerError) as exc:
+        runner.execute(args)
+
+    assert exc.value.reason_code == "invalid_now"
+
+
+def test_write_official_success_candidate_creates_canonical_official(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+
+    saved = load_manifest(manifest)
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    assert code == 0
+    assert saved["dry_run"] is False
+    assert saved["write_official"] is True
+    assert saved["write_action"] == "created"
+    assert saved["reason_code"] == "official_written"
+    assert saved["official_path"] == str(official)
+    assert official.exists()
+    assert saved["official_sha256_after"] == runner.sha256_bytes(official.read_bytes())
+    assert Path(saved["candidate_path"]).read_bytes() == official.read_bytes()
+
+
+def test_write_official_partial_whitelist_creates_partial_not_success(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate(status="partial")
+    candidate["volume_ratio"]["verification"]["status"] = "derived_confirmed"
+    candidate["volume_ratio"]["verification"]["method"] = "historical_five_day_volume_cross_check"
+    candidate["volume_ratio"].pop("manual_verification", None)
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+    patch_validator(monkeypatch)
+    patch_official_validator(monkeypatch)
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled partial replay",
+        )
+    )
+
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["outcome"] == "partial"
+    assert saved["needs_manual_review"] is True
+    assert saved["reason_code"] == "official_written_partial"
+    assert saved["write_action"] == "created"
+    assert saved["partial_write_policy"]["eligible"] is True
+    assert saved["partial_write_policy"]["needs_manual_review"] is True
+
+
+def test_write_official_partial_manual_confirmed_volume_ratio_is_not_eligible(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate(status="partial")
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+    patch_official_validator(monkeypatch)
+    monkeypatch.setattr(
+        runner.oft,
+        "promote_candidate_to_official",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("official transaction must not run")),
+    )
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled partial replay",
+        )
+    )
+
+    saved = load_manifest(manifest)
+    assert code == 2
+    assert saved["outcome"] == "needs_manual_review"
+    assert saved["reason_code"] == "partial_not_eligible_for_official"
+    assert saved["write_action"] == "not_eligible"
+    assert saved["partial_write_policy"]["eligible"] is False
+    assert not (repo / "data" / "daily" / "300274_2026-07-16_facts.json").exists()
+
+
+def test_write_official_partial_volume_ratio_candidate_is_not_eligible(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate(status="partial")
+    candidate["volume_ratio"].pop("confirmed_value")
+    candidate["volume_ratio"]["verification"]["status"] = "candidate"
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled partial replay",
+        )
+    )
+
+    saved = load_manifest(manifest)
+    assert code == 2
+    assert saved["outcome"] == "needs_manual_review"
+    assert saved["reason_code"] == "partial_not_eligible_for_official"
+    assert saved["write_action"] == "not_eligible"
+    assert not (repo / "data" / "daily" / "300274_2026-07-16_facts.json").exists()
+
+
+def test_write_official_existing_identical_is_noop_and_completed(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate()
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(candidate))
+    before_sha = runner.sha256_bytes(official.read_bytes())
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["write_action"] == "identical_noop"
+    assert saved["reason_code"] == "official_already_identical"
+    assert saved["official_sha256_before"] == before_sha
+    assert saved["official_sha256_after"] == before_sha
+
+
+def test_write_official_existing_different_conflict_blocks(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate()
+    existing = eligible_official_candidate()
+    existing["name"] = "old official"
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(existing))
+    before = official.read_bytes()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+
+    saved = load_manifest(manifest)
+    assert code == 2
+    assert saved["write_action"] == "conflict_blocked"
+    assert saved["reason_code"] == "official_conflict"
+    assert official.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("mutator", "action", "reason"),
+    [
+        (lambda value: value.update({"sealed": True}), "sealed_blocked", "sealed_exists"),
+        (lambda value: value["run"].update({"sealed": True}), "sealed_blocked", "sealed_exists"),
+        (lambda value: value.update({"manual": True}), "manual_blocked", "manual_exists"),
+        (lambda value: value["run"].update({"manual": True}), "manual_blocked", "manual_exists"),
+    ],
+)
+def test_write_official_sealed_or_manual_blocks_without_overwrite(tmp_path, monkeypatch, mutator, action, reason):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate()
+    existing = eligible_official_candidate()
+    mutator(existing)
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(existing))
+    before = official.read_bytes()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["write_action"] == action
+    assert saved["reason_code"] == reason
+    assert official.read_bytes() == before
+
+
+@pytest.mark.parametrize("mutator", [
+    lambda value: value.update({"sealed": "true"}),
+    lambda value: value["run"].update({"sealed": "true"}),
+    lambda value: value.update({"manual": "true"}),
+    lambda value: value["run"].update({"manual": "true"}),
+])
+def test_write_official_malformed_sealed_or_manual_marker_does_not_bypass_conflict(tmp_path, monkeypatch, mutator):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate()
+    existing = eligible_official_candidate()
+    existing["name"] = "different existing official"
+    mutator(existing)
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(existing))
+    before = official.read_bytes()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+
+    saved = load_manifest(manifest)
+    assert code == 2
+    assert saved["write_action"] == "conflict_blocked"
+    assert saved["reason_code"] == "official_conflict"
+    assert official.read_bytes() == before
+
+
+def test_official_written_but_manifest_bundle_failure_reports_compensation_state(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    captured = install_context_collision(monkeypatch, "summary")
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    saved = load_manifest(manifest)
+    assert code == 1
+    assert official.exists()
+    assert manifest["reason_code"] == "official_written_manifest_failed"
+    assert saved["reason_code"] == "official_written_manifest_failed"
+    assert saved["official_sha256_after"] == runner.sha256_bytes(official.read_bytes())
+    assert not list(captured["ctx"].run_dir.glob("*.tmp"))
+
+
+def test_post_write_validator_failure_records_changed_official_evidence(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    calls = {"count": 0}
+
+    def validator_second_failure(*_args, **_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {"status": "passed"}
+        return {"status": "failed", "exception_type": "ValueError", "message": "post-write bad"}
+
+    monkeypatch.setattr(runner.oft, "_validator_summary", validator_second_failure)
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    saved = load_manifest(manifest)
+    summary = Path(saved["manifest_path"]).with_name("summary.md").read_text(encoding="utf-8")
+    alert = json.loads(Path(saved["alerts"][0]).read_text(encoding="utf-8"))
+    assert code == 2
+    assert official.exists()
+    assert saved["stage"] == "finished"
+    assert saved["last_stage"] == "validate"
+    assert saved["outcome"] == "needs_manual_review"
+    assert saved["reason_code"] == "official_written_postcheck_failed"
+    assert saved["write_action"] == "created_postcheck_failed"
+    assert saved["official_changed"] is True
+    assert saved["official_bytes_equal_candidate"] is True
+    assert saved["official_sha256_after"] == runner.sha256_bytes(official.read_bytes())
+    assert saved["candidate_sha256"] == saved["official_sha256_after"]
+    assert saved["official_validator_after"]["status"] == "failed"
+    assert saved["official_post_write_error"]["stage"] == "post_write_validator"
+    assert alert["official_changed"] is True
+    assert "Post-write check failed after official facts changed" in summary
+    assert not list((repo / "data" / "daily").glob("*.tmp"))
+
+
+@pytest.mark.parametrize("tampered", [b'{"tampered":true}\n', b'{"schema_version"'])
+def test_post_write_bytes_mismatch_records_actual_after_sha(tmp_path, monkeypatch, tampered):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    stop = threading.Event()
+    tampered_event = threading.Event()
+    original_fsync = runner.oft.os.fsync
+
+    def slow_fsync(fd):
+        result = original_fsync(fd)
+        if official.exists() and not tampered_event.is_set():
+            deadline = time.monotonic() + 2
+            while not tampered_event.is_set() and time.monotonic() < deadline:
+                time.sleep(0.005)
+        return result
+
+    def external_tamper():
+        deadline = time.monotonic() + 2
+        while not stop.is_set() and time.monotonic() < deadline:
+            if official.exists():
+                official.write_bytes(tampered)
+                tampered_event.set()
+                return
+            time.sleep(0.001)
+
+    monkeypatch.setattr(runner.oft.os, "fsync", slow_fsync)
+    tamper_thread = threading.Thread(target=external_tamper, name="external-tamper")
+    tamper_thread.start()
+
+    try:
+        code, manifest = runner.execute(
+            parse_write_args(
+                tmp_path,
+                calendar,
+                "--mode",
+                "historical_backfill",
+                "--date",
+                "2026-07-16",
+                "--reason",
+                "controlled replay",
+            )
+        )
+    finally:
+        stop.set()
+        tamper_thread.join(5)
+
+    saved = load_manifest(manifest)
+    assert tampered_event.is_set()
+    assert code == 2
+    assert official.read_bytes() == tampered
+    assert saved["last_stage"] == "validate"
+    assert saved["outcome"] == "needs_manual_review"
+    assert saved["reason_code"] == "official_written_bytes_mismatch"
+    assert saved["write_action"] == "created_postcheck_failed"
+    assert saved["official_changed"] is True
+    assert saved["official_bytes_equal_candidate"] is False
+    assert saved["official_sha256_after"] == runner.sha256_bytes(tampered)
+    assert saved["candidate_sha256"] != saved["official_sha256_after"]
+    assert not list((repo / "data" / "daily").glob("*.tmp"))
+
+
+def test_post_write_read_failure_records_changed_official_without_sha(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    original_write = runner.oft._write_bytes_locked
+
+    def write_then_read_failure(output_path, payload_bytes, *, lock_state):
+        final_bytes, final_sha, error = original_write(output_path, payload_bytes, lock_state=lock_state)
+        assert final_bytes == payload_bytes and final_sha and error is None
+        return None, None, {"type": "OSError", "message": "cannot read after write", "stage": "post_write_read"}
+
+    monkeypatch.setattr(runner.oft, "_write_bytes_locked", write_then_read_failure)
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    saved = load_manifest(manifest)
+    assert code == 2
+    assert official.exists()
+    assert saved["reason_code"] == "official_written_postcheck_failed"
+    assert saved["write_action"] == "created_postcheck_failed"
+    assert saved["official_changed"] is True
+    assert saved["official_sha256_after"] is None
+    assert saved["official_post_write_error"]["stage"] == "post_write_read"
+
+
+def test_post_write_failure_then_rerun_is_not_reported_as_plain_success(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    calls = {"count": 0}
+
+    def validator_second_failure(*_args, **_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            return {"status": "failed", "exception_type": "ValueError", "message": "post-write bad"}
+        return {"status": "passed"}
+
+    monkeypatch.setattr(runner.oft, "_validator_summary", validator_second_failure)
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-16",
+        "--reason",
+        "controlled replay",
+    )
+    first_code, first_manifest = runner.execute(args)
+    assert first_code == 2
+    assert load_manifest(first_manifest)["reason_code"] == "official_written_postcheck_failed"
+
+    calls["count"] = 0
+    second_code, second_manifest = runner.execute(args)
+    second = load_manifest(second_manifest)
+    assert second_code == 0
+    assert second["write_action"] == "identical_noop"
+    assert second["reason_code"] == "official_already_identical"
+    assert second["official_sha256_after"] == runner.sha256_bytes((repo / "data" / "daily" / "300274_2026-07-16_facts.json").read_bytes())
+
+
+def test_post_write_failure_bundle_failure_keeps_transaction_reason_on_stderr(tmp_path, monkeypatch, capsys):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    install_temp_repo_root(monkeypatch, tmp_path)
+    candidate = eligible_official_candidate()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    install_context_collision(monkeypatch, "summary")
+    calls = {"count": 0}
+
+    def validator_second_failure(*_args, **_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {"status": "passed"}
+        return {"status": "failed", "exception_type": "ValueError", "message": "post-write bad"}
+
+    monkeypatch.setattr(runner.oft, "_validator_summary", validator_second_failure)
+
+    code = runner.main(
+        [
+            "--write-official",
+            "--symbol",
+            "300274",
+            "--runtime-dir",
+            str(tmp_path / "runtime"),
+            "--calendar",
+            str(calendar),
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().err)
+    assert code == 1
+    assert payload["reason_code"] == "official_written_postcheck_failed"
+    assert payload["manifest_bundle_reason_code"] == "official_written_manifest_failed"
+    assert payload["official_path"]
+    assert payload["official_sha256_after"]
+    assert payload["write_action"] == "created_postcheck_failed"
 
 
 def test_stdout_marker_allows_surrounding_logs_and_other_json():
@@ -849,6 +1489,8 @@ def install_context_collision(monkeypatch, kind: str):
         captured["ctx"] = ctx
         if kind == "candidate":
             ctx.candidate_path.mkdir(parents=True)
+        elif kind == "summary":
+            ctx.summary_path.mkdir(parents=True)
         elif kind == "alert":
             (ctx.alerts_dir / f"{ctx.run_id}.json").mkdir(parents=True)
         return ctx

@@ -33,6 +33,7 @@ def make_args(**overrides):
         "source": "auto",
         "dry_run": False,
         "no_write": False,
+        "write_official": False,
         "write_partial": False,
         "timeout": 15.0,
     }
@@ -416,10 +417,11 @@ class GenerateDailyFactsTests(unittest.TestCase):
                 )
 
             self.assertEqual(outcome.exit_code, gdf.EXIT_SUCCESS)
-            facts = json.loads(output.read_text(encoding="utf-8"))
+            facts = outcome.facts_pack
             self.assertEqual(facts["volume_ratio"]["verification"]["method"], "same_day_snapshot_plus_sohu_five_day_cross_check")
             self.assertIn("snapshot_ohlc_check", facts["volume_ratio"])
             self.assertIn("five_day_volume_check", facts["volume_ratio"])
+            self.assertFalse(outcome.wrote_file)
             result = subprocess.run(
                 [
                     "python3",
@@ -706,11 +708,11 @@ class GenerateDailyFactsTests(unittest.TestCase):
             outcome = gdf.run(args, fetch_primary=primary, fetch_fallback=fallback)
             self.assertEqual(outcome.status, "partial")
             self.assertEqual(outcome.exit_code, gdf.EXIT_PARTIAL)
-            self.assertTrue(outcome.wrote_file)
+            self.assertFalse(outcome.wrote_file)
+            self.assertFalse(output.exists())
             self.assertEqual(outcome.facts_pack["run"]["source_used"], "tencent")
             self.assertEqual(outcome.facts_pack["quote"]["open"], 123.17)
             self.assertEqual(outcome.facts_pack["quote"]["close"], 114.79)
-            self.assertTrue(output.exists())
             fallback.assert_not_called()
 
     def test_primary_failure_fallback_success(self):
@@ -724,7 +726,8 @@ class GenerateDailyFactsTests(unittest.TestCase):
             )
             self.assertEqual(outcome.facts_pack["run"]["source_used"], "eastmoney")
             self.assertEqual(outcome.exit_code, gdf.EXIT_PARTIAL)
-            self.assertTrue(outcome.wrote_file)
+            self.assertFalse(outcome.wrote_file)
+            self.assertFalse(output.exists())
             self.assertTrue(outcome.facts_pack["run"]["errors"])
             self.assertEqual(outcome.facts_pack["run"]["errors"][0]["error_type"], "network_error")
 
@@ -917,7 +920,7 @@ class GenerateDailyFactsTests(unittest.TestCase):
             )
             self.assertEqual(outcome.status, "success")
             self.assertEqual(outcome.exit_code, gdf.EXIT_SUCCESS)
-            self.assertTrue(outcome.wrote_file)
+            self.assertFalse(outcome.wrote_file)
             self.assertEqual(outcome.facts_pack["run"]["status"], "success")
             self.assertEqual(outcome.facts_pack["name"], "阳光电源")
 
@@ -931,6 +934,7 @@ class GenerateDailyFactsTests(unittest.TestCase):
             )
             self.assertEqual(outcome_partial.status, "partial")
             self.assertEqual(outcome_partial.exit_code, gdf.EXIT_PARTIAL)
+            self.assertFalse(outcome_partial.wrote_file)
 
     def test_auto_continues_after_incomplete_primary_and_uses_complete_fallback(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1260,8 +1264,8 @@ class GenerateDailyFactsTests(unittest.TestCase):
             )
             self.assertEqual(outcome.status, "partial")
             self.assertEqual(outcome.exit_code, gdf.EXIT_PARTIAL)
-            self.assertTrue(outcome.wrote_file)
-            self.assertTrue(output.exists())
+            self.assertFalse(outcome.wrote_file)
+            self.assertFalse(output.exists())
             self.assertTrue(outcome.facts_pack["needs_manual_check"]["volume_ratio"])
 
     def test_pct_change_conflict_uses_derived_value(self):
@@ -1689,13 +1693,12 @@ class GenerateDailyFactsTests(unittest.TestCase):
             original = json.dumps(existing, ensure_ascii=False, indent=2) + "\n"
             output.write_text(original, encoding="utf-8")
             args = make_args(output=str(output), source="tencent")
-            with mock.patch.object(gdf.os, "replace", side_effect=OSError("replace failed")):
-                with self.assertRaises(OSError):
-                    gdf.run(
-                        args,
-                        fetch_primary=make_fetcher(load_fixture("tencent_quote_0710.json")),
-                        fetch_fallback=make_error_fetcher("source_error", "unused"),
-                    )
+            outcome = gdf.run(
+                args,
+                fetch_primary=make_fetcher(load_fixture("tencent_quote_0710.json")),
+                fetch_fallback=make_error_fetcher("source_error", "unused"),
+            )
+            self.assertFalse(outcome.wrote_file)
             self.assertEqual(output.read_text(encoding="utf-8"), original)
             self.assertEqual(list(output.parent.glob("*.tmp")), [])
 
@@ -1721,13 +1724,123 @@ class GenerateDailyFactsTests(unittest.TestCase):
                 fetch_primary=make_fetcher(load_fixture("tencent_quote_0710.json")),
                 fetch_fallback=make_error_fetcher("source_error", "unused"),
             )
-            self.assertTrue(output.exists())
-            written = json.loads(output.read_text(encoding="utf-8"))
-            self.assertEqual(written["run"]["source_used"], "tencent")
-            self.assertEqual(written["trade_date"], "2026-07-10")
-            self.assertEqual(outcome.output_sha256, gdf.ofl.sha256_file(output))
+            self.assertFalse(output.exists())
+            self.assertEqual(outcome.facts_pack["run"]["source_used"], "tencent")
+            self.assertEqual(outcome.facts_pack["trade_date"], "2026-07-10")
+            self.assertFalse(outcome.wrote_file)
+            self.assertIsNone(outcome.output_sha256)
             tmp_residuals = list(output.parent.glob("*.tmp"))
             self.assertEqual(tmp_residuals, [])
+
+    def test_generator_output_without_write_official_never_writes_official(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir) / "repo"
+            official = repo / "data" / "daily" / "300274_2026-07-10_facts.json"
+            candidate_output = Path(tmpdir) / "candidate.json"
+            args = make_args(output=str(candidate_output), source="tencent", write_partial=True)
+            with mock.patch.object(gdf, "REPO_ROOT", repo):
+                outcome = gdf.run(
+                    args,
+                    fetch_primary=make_fetcher(load_fixture("tencent_quote_0710.json")),
+                    fetch_fallback=make_error_fetcher("source_error", "unused"),
+                    volume_ratio_candidate_provider=lambda *_args: load_fixture("volume_ratio_candidate_same_day.json"),
+                )
+            self.assertIn(outcome.status, {"success", "partial"})
+            self.assertFalse(outcome.wrote_file)
+            self.assertFalse(official.exists())
+            self.assertFalse(candidate_output.exists())
+
+    def test_generator_output_to_real_official_path_without_write_official_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir) / "repo"
+            official = repo / "data" / "daily" / "300274_2026-07-10_facts.json"
+            official.parent.mkdir(parents=True)
+            args = make_args(output=str(official), source="tencent", write_partial=True)
+            with mock.patch.object(gdf, "REPO_ROOT", repo):
+                outcome = gdf.run(
+                    args,
+                    fetch_primary=mock.Mock(side_effect=AssertionError("fetch must not run")),
+                    fetch_fallback=mock.Mock(side_effect=AssertionError("fallback must not run")),
+                )
+            self.assertEqual(outcome.status, "schema_error")
+            self.assertFalse(outcome.wrote_file)
+            self.assertFalse(official.exists())
+
+    def test_write_official_cli_rejects_custom_output(self):
+        with self.assertRaises(SystemExit):
+            gdf.parse_args([
+                "--symbol",
+                "300274",
+                "--date",
+                "2026-07-10",
+                "--write-official",
+                "--output",
+                "/tmp/not-official.json",
+            ])
+
+    def test_write_official_creates_canonical_official_in_temp_repo(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir) / "repo"
+            args = make_args(output=None, source="tencent", write_partial=True, write_official=True)
+            volume_candidate = {
+                "candidate_value": 1.79,
+                "source": "pytest",
+                "source_date": "2026-07-10",
+                "fetched_at": "2026-07-13T00:00:00Z",
+                "method": "historical_five_day_volume_cross_check",
+                "verification_status": "confirmed",
+                "confirmed_by": "pytest",
+            }
+            with (
+                mock.patch.object(gdf, "REPO_ROOT", repo),
+                mock.patch.object(gdf, "validate_generated_facts_pack", lambda *_args, **_kwargs: None),
+                mock.patch.object(gdf.oft, "_validator_summary", lambda *_args, **_kwargs: {"status": "passed"}),
+            ):
+                outcome = gdf.run(
+                    args,
+                    fetch_primary=make_fetcher(load_fixture("tencent_quote_0710.json")),
+                    fetch_fallback=make_error_fetcher("source_error", "unused"),
+                    volume_ratio_candidate_provider=lambda *_args: volume_candidate,
+                )
+            official = repo / "data" / "daily" / "300274_2026-07-10_facts.json"
+            self.assertEqual(Path(outcome.output_path).resolve(), official.resolve())
+            self.assertTrue(outcome.wrote_file)
+            self.assertTrue(official.exists())
+            self.assertEqual(outcome.output_sha256, gdf.ofl.sha256_file(official))
+
+    def test_write_official_rejects_noncanonical_symbol_and_date(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir) / "repo"
+            cases = [
+                make_args(output=None, symbol="../300274", write_official=True),
+                make_args(output=None, date="../2026-07-10", write_official=True),
+            ]
+            for args in cases:
+                with self.subTest(args=args), mock.patch.object(gdf, "REPO_ROOT", repo):
+                    outcome = gdf.run(
+                        args,
+                        fetch_primary=mock.Mock(side_effect=AssertionError("fetch must not run")),
+                        fetch_fallback=mock.Mock(side_effect=AssertionError("fallback must not run")),
+                    )
+                    self.assertEqual(outcome.status, "schema_error")
+                    self.assertFalse(outcome.wrote_file)
+
+    def test_write_official_rejects_symlink_escape_in_temp_repo(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir) / "repo"
+            outside = Path(tmpdir) / "outside"
+            outside.mkdir()
+            (repo / "data").mkdir(parents=True)
+            (repo / "data" / "daily").symlink_to(outside, target_is_directory=True)
+            args = make_args(output=None, source="tencent", write_official=True)
+            with mock.patch.object(gdf, "REPO_ROOT", repo):
+                outcome = gdf.run(
+                    args,
+                    fetch_primary=mock.Mock(side_effect=AssertionError("fetch must not run")),
+                    fetch_fallback=mock.Mock(side_effect=AssertionError("fallback must not run")),
+                )
+            self.assertEqual(outcome.status, "schema_error")
+            self.assertFalse(outcome.wrote_file)
 
     def test_07_10_gold_sample_preserves_manual_volume_ratio(self):
         with tempfile.TemporaryDirectory() as tmpdir:

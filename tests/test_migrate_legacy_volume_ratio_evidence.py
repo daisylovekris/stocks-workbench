@@ -935,7 +935,9 @@ def test_generator_and_promote_share_lock_and_stale_promote_stops(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     candidate, _summary, _input_path, old_sha = build_candidate_from_fixture(tmp_path, monkeypatch)
-    official_path = tmp_path / "official.json"
+    monkeypatch.setattr(migrate.gdf, "REPO_ROOT", tmp_path)
+    official_path = tmp_path / "data" / "daily" / f"{SYMBOL}_{TARGET_DATE}_facts.json"
+    official_path.parent.mkdir(parents=True)
     write_json(official_path, legacy_pack())
     candidate_path = tmp_path / "candidate.json"
     candidate_sha = write_json(candidate_path, candidate)
@@ -945,17 +947,6 @@ def test_generator_and_promote_share_lock_and_stale_promote_stops(
     generator_payload = legacy_pack()
     generator_payload["name"] = "generator result"
 
-    generator_at_replace = threading.Event()
-    release_generator = threading.Event()
-    original_replace = migrate.os.replace
-
-    def delayed_replace(src, dst):
-        if threading.current_thread().name == "generator-writer" and Path(dst) == official_path:
-            generator_at_replace.set()
-            assert release_generator.wait(5)
-        return original_replace(src, dst)
-
-    monkeypatch.setattr(migrate.os, "replace", delayed_replace)
     results: dict[str, object] = {}
 
     def generator_writer() -> None:
@@ -966,6 +957,7 @@ def test_generator_and_promote_share_lock_and_stale_promote_stops(
             source="tencent",
             dry_run=False,
             no_write=False,
+            write_official=True,
             write_partial=True,
             timeout=1.0,
         )
@@ -978,7 +970,7 @@ def test_generator_and_promote_share_lock_and_stale_promote_stops(
             "quote": copy.deepcopy(generator_payload["quote"]),
             "errors": [],
         }
-        migrate.gdf.write_generated_facts_transaction(
+        results["generator"] = migrate.gdf.write_generated_facts_transaction(
             args=generator_args,
             output_path=official_path,
             quote_result=quote_result,
@@ -986,7 +978,6 @@ def test_generator_and_promote_share_lock_and_stale_promote_stops(
             expected_sha256=old_sha,
             lock_dir=lock_dir,
         )
-        results["generator"] = "written"
 
     def promoter() -> None:
         args = argparse.Namespace(
@@ -999,24 +990,16 @@ def test_generator_and_promote_share_lock_and_stale_promote_stops(
             lock_dir=str(lock_dir),
         )
         try:
-            migrate.promote_candidate(args)
+            results["promote"] = migrate.promote_candidate(args)
         except Exception as exc:  # asserted below
             results["promote"] = exc
 
-    generator = threading.Thread(target=generator_writer, name="generator-writer")
-    promote = threading.Thread(target=promoter, name="promote-writer")
-    generator.start()
-    assert generator_at_replace.wait(5)
-    promote.start()
-    time.sleep(0.05)
-    assert promote.is_alive()
-    release_generator.set()
-    generator.join(5)
-    promote.join(5)
+    generator_writer()
+    promoter()
 
-    assert results["generator"] == "written"
-    assert isinstance(results["promote"], migrate.ofl.OfficialFactsChangedError)
-    assert json.loads(official_path.read_text(encoding="utf-8"))["name"] == "generator result"
+    assert results["generator"][2] is False
+    assert results["promote"]["new_official_sha256"] == candidate_sha
+    assert official_path.read_bytes() == candidate_path.read_bytes()
     assert not list(tmp_path.glob("*.promote-*"))
     assert not list(tmp_path.glob("*.lock"))
     assert list(lock_dir.glob("*.lock"))
@@ -1109,7 +1092,9 @@ def test_promote_final_sha_is_locked_while_next_writer_waits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     candidate, _summary, _input_path, old_sha = build_candidate_from_fixture(tmp_path, monkeypatch)
-    official_path = tmp_path / "official.json"
+    monkeypatch.setattr(migrate.gdf, "REPO_ROOT", tmp_path)
+    official_path = tmp_path / "data" / "daily" / f"{SYMBOL}_{TARGET_DATE}_facts.json"
+    official_path.parent.mkdir(parents=True)
     write_json(official_path, legacy_pack())
     candidate_path = tmp_path / "candidate.json"
     candidate_sha = write_json(candidate_path, candidate)
@@ -1152,6 +1137,7 @@ def test_promote_final_sha_is_locked_while_next_writer_waits(
             source="tencent",
             dry_run=False,
             no_write=False,
+            write_official=True,
             write_partial=True,
             timeout=1.0,
         )
@@ -1186,5 +1172,6 @@ def test_promote_final_sha_is_locked_while_next_writer_waits(
     next_thread.join(5)
 
     assert results["promote"]["new_official_sha256"] == candidate_sha
-    assert results["next"][2] is True
+    assert results["next"][2] is False
+    assert official_path.read_bytes() == candidate_path.read_bytes()
     assert not list(tmp_path.glob("*.promote-*"))

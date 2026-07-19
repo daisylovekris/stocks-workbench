@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Phase A read-only after-close runner for daily facts dry-runs.
+"""Phase B after-close runner for controlled daily facts generation.
 
-This runner deliberately does not write ``data/daily`` and does not install or
-enable any scheduler.  It only gates a generator dry-run, captures evidence, and
-writes runtime artifacts outside the repository by default.
+The default mode remains non-official: it only gates a generator dry-run,
+captures evidence, and writes runtime artifacts outside the repository.  Formal
+official facts writes require explicit ``--write-official``.  This runner still
+does not install or enable launchd, and it does not automatically modify review,
+current card, index, or weekly documents.
 """
 
 from __future__ import annotations
@@ -28,9 +30,13 @@ from typing import Any, Iterator
 from zoneinfo import ZoneInfo
 
 try:
+    from tools import official_facts_lock as ofl
+    from tools import official_facts_transaction as oft
     from tools import validate_review_chain as vrc
 except ModuleNotFoundError:  # pragma: no cover - direct execution fallback
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from tools import official_facts_lock as ofl
+    from tools import official_facts_transaction as oft
     from tools import validate_review_chain as vrc
 
 
@@ -39,8 +45,8 @@ DEFAULT_RUNTIME_DIR = Path("~/Library/Application Support/Mimo-Lab/stocks-runtim
 DEFAULT_CALENDAR = REPO_ROOT / "config" / "a_share_trading_calendar_2026.json"
 DEFAULT_CUTOFF = "15:20"
 BUSINESS_TIMEZONE = "Asia/Shanghai"
-SCHEMA_VERSION = "runner_manifest_v0.2_phase_a"
-SUMMARY_SCHEMA_VERSION = "runner_summary_v0.2_phase_a"
+SCHEMA_VERSION = "runner_manifest_v0.2_phase_b"
+SUMMARY_SCHEMA_VERSION = "runner_summary_v0.2_phase_b"
 GENERATOR = REPO_ROOT / "tools" / "generate_daily_facts.py"
 CANDIDATE_STDOUT_MARKER = "STOCKS_FACTS_CANDIDATE_JSON="
 ALLOWED_FACTS_SCHEMAS = {"facts_pack_v0.2"}
@@ -316,10 +322,11 @@ def resolve_target(args: argparse.Namespace, now: datetime) -> tuple[str, date]:
     raise RunnerError("calendar_invalid", f"unknown mode: {args.mode}")
 
 
-def official_path_for(symbol: str, target_date: date, override: str | None) -> Path:
-    if override:
-        return Path(override)
-    return REPO_ROOT / "data" / "daily" / f"{symbol}_{target_date.isoformat()}_facts.json"
+def official_path_for(symbol: str, target_date: date) -> Path:
+    try:
+        return oft.canonical_official_path(REPO_ROOT, symbol, target_date.isoformat())
+    except ValueError as exc:
+        raise RunnerError("official_path_invalid", str(exc), stage="gate") from exc
 
 
 def is_sealed_facts(path: Path) -> bool:
@@ -329,10 +336,7 @@ def is_sealed_facts(path: Path) -> bool:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    if not isinstance(data, dict):
-        return False
-    run = data.get("run") if isinstance(data.get("run"), dict) else {}
-    return bool(data.get("sealed") is True or run.get("sealed") is True or run.get("status") == "sealed")
+    return oft.is_sealed_official(data if isinstance(data, dict) else None)
 
 
 def _manifest_timestamp(manifest: dict[str, Any]) -> datetime | None:
@@ -355,6 +359,7 @@ def scan_previous_runs(
     *,
     symbol: str,
     mode: str,
+    write_official: bool = True,
 ) -> tuple[str | None, str | None, list[dict[str, str]]]:
     runs_dir = runtime_dir / "runs" / target_date.isoformat()
     diagnostics: list[dict[str, str]] = []
@@ -392,9 +397,13 @@ def scan_previous_runs(
     matching.sort(key=lambda item: (item[0], item[1]))
     previous_run_id = matching[-1][1]
     completed = any(
-        manifest.get("dry_run") is False and manifest.get("outcome") == "success"
+        manifest.get("write_official") is True
+        and manifest.get("dry_run") is False
+        and manifest.get("write_action") in {"created", "identical_noop"}
         for _, _, manifest in matching
     )
+    if not write_official:
+        completed = False
     return ("already_completed" if completed else None), previous_run_id, diagnostics
 
 
@@ -616,6 +625,16 @@ def classify_generator(
     return "validate", "success", None  # type: ignore[return-value]
 
 
+def generator_exit_matches_status(exit_code: int | None, status: str) -> bool:
+    if status == "success":
+        return exit_code == 0
+    if status == "partial":
+        return exit_code == 2
+    if status == "date_mismatch":
+        return exit_code not in (0, 2, None)
+    return exit_code not in (0, 2, None)
+
+
 def manifest_base(
     *,
     ctx: RunContext,
@@ -646,7 +665,9 @@ def manifest_base(
         "last_stage": "gate",
         "outcome": "failed",
         "reason_code": None,
-        "dry_run": True,
+        "needs_manual_review": False,
+        "dry_run": not bool(getattr(ctx.args, "write_official", False)),
+        "write_official": bool(getattr(ctx.args, "write_official", False)),
         "generator": {
             "command": None,
             "exit_code": None,
@@ -658,8 +679,16 @@ def manifest_base(
         "candidate_path": str(ctx.candidate_path),
         "candidate_sha256": None,
         "official_path": str(official_path) if official_path else None,
+        "official_exists_before": None,
         "official_sha256_before": None,
         "official_sha256_after": None,
+        "write_action": None,
+        "partial_write_policy": None,
+        "official_validator_before": {"status": "not_run"},
+        "official_validator_after": {"status": "not_run"},
+        "official_changed": False,
+        "official_bytes_equal_candidate": None,
+        "official_post_write_error": None,
         "validator": {"status": "not_run"},
         "retry_count": 0,
         "alerts": [],
@@ -685,6 +714,7 @@ def finish_manifest(
     manifest["last_stage"] = last_stage
     manifest["outcome"] = outcome
     manifest["reason_code"] = reason_code
+    manifest["needs_manual_review"] = outcome in {"partial", "needs_manual_review"}
 
 
 def write_alert(ctx: RunContext, manifest: dict[str, Any]) -> str:
@@ -695,6 +725,10 @@ def write_alert(ctx: RunContext, manifest: dict[str, Any]) -> str:
         "target_date": manifest.get("target_date"),
         "outcome": manifest.get("outcome"),
         "reason_code": manifest.get("reason_code"),
+        "write_action": manifest.get("write_action"),
+        "official_path": manifest.get("official_path"),
+        "official_sha256_after": manifest.get("official_sha256_after"),
+        "official_changed": manifest.get("official_changed"),
         "manifest_path": str(ctx.manifest_path),
     }
     alert_path = ctx.alerts_dir / f"{ctx.run_id}.json"
@@ -717,14 +751,24 @@ def summary_markdown(manifest: dict[str, Any]) -> str:
             f"- stage: `{manifest.get('stage')}`",
             f"- last_stage: `{manifest.get('last_stage')}`",
             f"- dry_run: `{manifest.get('dry_run')}`",
+            f"- write_official: `{manifest.get('write_official')}`",
             f"- candidate_sha256: `{manifest.get('candidate_sha256')}`",
+            f"- write_action: `{manifest.get('write_action')}`",
             f"- official_sha256_before: `{manifest.get('official_sha256_before')}`",
             f"- official_sha256_after: `{manifest.get('official_sha256_after')}`",
+            f"- official_changed: `{manifest.get('official_changed')}`",
+            f"- official_bytes_equal_candidate: `{manifest.get('official_bytes_equal_candidate')}`",
             f"- generator_exit_code: `{manifest.get('generator', {}).get('exit_code')}`",
             f"- generator_result_status: `{manifest.get('generator', {}).get('result_status')}`",
             f"- validator_status: `{manifest.get('validator', {}).get('status')}`",
             "",
-            "Phase A is read-only: no official facts, review, current card, index, or weekly file is written.",
+            "Phase B writes official facts only when --write-official is explicitly selected; review, current card, index, and weekly files are never written by this runner.",
+            (
+                "Post-write check failed after official facts changed; manual verification is required before treating the official file as usable."
+                if manifest.get("official_changed")
+                and manifest.get("reason_code") in {"official_written_postcheck_failed", "official_written_bytes_mismatch"}
+                else ""
+            ),
             "",
         ]
     )
@@ -777,16 +821,28 @@ def persist_terminal_bundle(
         )
         return True
     except Exception as exc:  # noqa: BLE001 - terminal bundle must fail closed
+        official_was_written = (
+            manifest.get("write_action") in {"created", "identical_noop", "created_postcheck_failed"}
+            or manifest.get("official_changed") is True
+        ) and bool(manifest.get("official_sha256_after") or manifest.get("official_changed"))
+        previous_reason_code = manifest.get("reason_code")
         manifest["exception"] = {
             "type": type(exc).__name__,
             "message": sanitize_text(str(exc))[:500],
         }
+        manifest["manifest_bundle_failed"] = True
+        manifest["manifest_bundle_reason_code"] = "official_written_manifest_failed" if official_was_written else "manifest_write_failed"
         finish_manifest(
             manifest,
             started_monotonic=started_monotonic,
             last_stage="manifest",
-            outcome="failed",
-            reason_code="manifest_write_failed",
+            outcome="failed" if not official_was_written else manifest.get("outcome", "failed"),
+            reason_code=(
+                previous_reason_code
+                if official_was_written
+                and previous_reason_code in {"official_written_postcheck_failed", "official_written_bytes_mismatch"}
+                else "official_written_manifest_failed" if official_was_written else "manifest_write_failed"
+            ),
         )
         try:
             atomic_write_json(ctx.manifest_path, manifest)
@@ -810,14 +866,22 @@ def prepare_runtime_dir(runtime_dir: Path) -> None:
 
 
 def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
-    if not args.dry_run:
-        raise RunnerError("dry_run_required", "Phase A only supports --dry-run", stage="gate")
+    if bool(args.dry_run) == bool(args.write_official):
+        raise RunnerError("run_mode_required", "choose exactly one of --dry-run or --write-official", stage="gate")
+    if args.write_official and args.now:
+        raise RunnerError("invalid_now", "--now is only allowed with --dry-run", stage="gate")
+    if args.write_official and args.mode == "historical_backfill" and (not args.date or not args.reason or not args.reason.strip()):
+        raise RunnerError(
+            "historical_backfill_requires_reason",
+            "--write-official historical_backfill requires --date and non-empty --reason",
+            stage="gate",
+        )
     runtime_dir = normalize_runtime_dir(
         args.runtime_dir or os.environ.get("STOCKS_RUNTIME_DIR") or DEFAULT_RUNTIME_DIR
     )
     started_monotonic = time.monotonic()
     started_at = datetime.now(ZoneInfo(BUSINESS_TIMEZONE))
-    now = parse_now(args.now)
+    now = parse_now(args.now if args.dry_run else None)
     try:
         fallback_target = parse_trade_date(args.date, field="--date") if args.date else now.date()
     except ValueError:
@@ -840,7 +904,7 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
         manifest_target_date = target_date
         if target_date != fallback_target:
             ctx = build_context(args, runtime_dir, target_date, mode)
-        official_path = official_path_for(args.symbol, target_date, args.official_path)
+        official_path = official_path_for(args.symbol, target_date)
         calendar = load_calendar(Path(args.calendar))
         manifest = manifest_base(
             ctx=ctx,
@@ -864,7 +928,20 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
             finish_manifest(manifest, started_monotonic=started_monotonic, last_stage="gate", outcome="skipped", reason_code="before_close")
             persisted = persist_terminal_bundle(ctx, manifest, started_monotonic=started_monotonic, include_alert=False)
             return (0 if persisted else 1), manifest
-        if is_sealed_facts(official_path):
+        expected_official_sha = None
+        official_exists_before = False
+        try:
+            with ofl.official_facts_lock(official_path) as lock_state:
+                official_bytes, expected_official_sha = ofl.read_current_official(
+                    official_path,
+                    lock_state=lock_state,
+                )
+                official_exists_before = official_bytes is not None
+        except Exception as exc:  # noqa: BLE001
+            raise RunnerError("official_snapshot_failed", sanitize_text(str(exc)), stage="gate") from exc
+        manifest["official_exists_before"] = official_exists_before
+        manifest["official_sha256_before"] = expected_official_sha
+        if args.dry_run and is_sealed_facts(official_path):
             finish_manifest(manifest, started_monotonic=started_monotonic, last_stage="gate", outcome="skipped", reason_code="sealed_exists")
             persisted = persist_terminal_bundle(ctx, manifest, started_monotonic=started_monotonic, include_alert=True)
             return (0 if persisted else 1), manifest
@@ -873,6 +950,7 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
             target_date,
             symbol=args.symbol,
             mode=mode,
+            write_official=args.write_official,
         )
         manifest["previous_run_id"] = previous_run_id
         manifest["scan_diagnostics"] = scan_diagnostics
@@ -960,6 +1038,81 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
                 validator=validator,
                 target_date=target_date,
             )
+            if outcome in {"success", "needs_manual_review"} and not generator_exit_matches_status(result.returncode, run_status):
+                last_stage, outcome, reason_code = "fetch", "failed", "generator_status_exit_mismatch"
+            if args.write_official and outcome in {"success", "needs_manual_review"} and run_status in {"success", "partial"}:
+                current_stage = "official"
+                if validator.get("status") != "passed":
+                    last_stage, outcome, reason_code = "validate", "failed", "validator_failed"
+                else:
+                    candidate_bytes = _json_payload(candidate)
+                    manifest["candidate_sha256"] = sha256_bytes(candidate_bytes)
+                    if run_status == "partial":
+                        partial_policy = oft.evaluate_partial_write_policy(candidate)
+                        manifest["partial_write_policy"] = {**partial_policy.__dict__}
+                        if not partial_policy.eligible:
+                            manifest["write_action"] = "not_eligible"
+                            last_stage, outcome, reason_code = (
+                                "official",
+                                "needs_manual_review",
+                                "partial_not_eligible_for_official",
+                            )
+                        else:
+                            write_result = oft.promote_candidate_to_official(
+                                repo_root=REPO_ROOT,
+                                official_path=official_path,
+                                candidate=candidate,
+                                candidate_bytes=candidate_bytes,
+                                symbol=args.symbol,
+                                target_date=target_date.isoformat(),
+                                expected_sha256=expected_official_sha,
+                            )
+                            manifest["official_path"] = str(write_result.official_path)
+                            manifest["official_exists_before"] = write_result.official_exists_before
+                            manifest["official_sha256_before"] = write_result.official_sha256_before
+                            manifest["official_sha256_after"] = write_result.official_sha256_after
+                            manifest["write_action"] = write_result.write_action
+                            manifest["partial_write_policy"] = write_result.partial_write_policy
+                            manifest["official_validator_before"] = write_result.official_validator_before
+                            manifest["official_validator_after"] = write_result.official_validator_after
+                            manifest["official_changed"] = write_result.official_changed
+                            manifest["official_bytes_equal_candidate"] = write_result.official_bytes_equal_candidate
+                            manifest["official_post_write_error"] = write_result.post_write_error
+                            last_stage = (
+                                "validate"
+                                if write_result.reason_code in {"official_written_postcheck_failed", "official_written_bytes_mismatch"}
+                                else "official"
+                            )
+                            outcome = write_result.outcome
+                            reason_code = write_result.reason_code
+                    else:
+                        write_result = oft.promote_candidate_to_official(
+                            repo_root=REPO_ROOT,
+                            official_path=official_path,
+                            candidate=candidate,
+                            candidate_bytes=candidate_bytes,
+                            symbol=args.symbol,
+                            target_date=target_date.isoformat(),
+                            expected_sha256=expected_official_sha,
+                        )
+                        manifest["official_path"] = str(write_result.official_path)
+                        manifest["official_exists_before"] = write_result.official_exists_before
+                        manifest["official_sha256_before"] = write_result.official_sha256_before
+                        manifest["official_sha256_after"] = write_result.official_sha256_after
+                        manifest["write_action"] = write_result.write_action
+                        manifest["partial_write_policy"] = write_result.partial_write_policy
+                        manifest["official_validator_before"] = write_result.official_validator_before
+                        manifest["official_validator_after"] = write_result.official_validator_after
+                        manifest["official_changed"] = write_result.official_changed
+                        manifest["official_bytes_equal_candidate"] = write_result.official_bytes_equal_candidate
+                        manifest["official_post_write_error"] = write_result.post_write_error
+                        last_stage = (
+                            "validate"
+                            if write_result.reason_code in {"official_written_postcheck_failed", "official_written_bytes_mismatch"}
+                            else "official"
+                        )
+                        outcome = write_result.outcome
+                        reason_code = write_result.reason_code
             finish_manifest(manifest, started_monotonic=started_monotonic, last_stage=last_stage, outcome=outcome, reason_code=reason_code)
             persisted = persist_terminal_bundle(
                 ctx,
@@ -1034,8 +1187,10 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Read-only Phase A after-close daily facts runner")
-    parser.add_argument("--dry-run", action="store_true", help="Required in Phase A; never writes official facts")
+    parser = argparse.ArgumentParser(description="Phase B after-close daily facts runner")
+    mode_group = parser.add_mutually_exclusive_group(required=True)
+    mode_group.add_argument("--dry-run", action="store_true", help="Generate and validate candidate only")
+    mode_group.add_argument("--write-official", action="store_true", help="Explicitly promote eligible candidate to official facts")
     parser.add_argument("--symbol", default="300274")
     parser.add_argument("--mode", choices=("today_after_close", "historical_backfill"), default="today_after_close")
     parser.add_argument("--date", help="Target date for historical_backfill only")
@@ -1044,7 +1199,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cutoff", default=DEFAULT_CUTOFF)
     parser.add_argument("--calendar", default=str(DEFAULT_CALENDAR))
     parser.add_argument("--runtime-dir", default=None)
-    parser.add_argument("--official-path", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--generator-timeout", type=float, default=15.0)
     return parser
 
@@ -1075,8 +1229,16 @@ def main(argv: list[str] | None = None) -> int:
             "outcome": manifest.get("outcome"),
             "reason_code": manifest.get("reason_code"),
             "manifest": manifest.get("manifest_path"),
+            "official_path": manifest.get("official_path"),
+            "official_sha256_after": manifest.get("official_sha256_after"),
+            "write_action": manifest.get("write_action"),
+            "official_changed": manifest.get("official_changed"),
+            "manifest_bundle_reason_code": manifest.get("manifest_bundle_reason_code"),
         }
-        stream = sys.stderr if manifest.get("outcome") == "failed" and not manifest.get("manifest_path") else sys.stdout
+        stream = sys.stderr if (
+            (manifest.get("outcome") == "failed" and not manifest.get("manifest_path"))
+            or manifest.get("manifest_bundle_failed") is True
+        ) else sys.stdout
         print(json.dumps(payload, ensure_ascii=False, sort_keys=True), file=stream)
     return code
 
