@@ -137,6 +137,19 @@ is_primary_documentation_general_prompt() {
   [[ "$text" =~ ^[[:space:]#\>\*\-]*(关闭|修正|更新|完成|修复).*(phase[[:space:]_-]*c|review[[:space:]_-]*manifest).*(规则文档.*p[12]|p[12].*规则文档).*(文档封箱|归档|提交) ]]
 }
 
+is_primary_workflow_general_prompt() {
+  local text="$1"
+  case "$text" in
+    *代码审查*|*最终审查*|*终审*|*审查当前改动*|*审阅当前改动*|*复核当前改动*)
+      return 1
+      ;;
+  esac
+  if [[ "$text" =~ (^|[[:space:][:punct:]])/?(code[[:space:]]+review|final[[:space:]]+code[[:space:]]+review|review[[:space:]]+current[[:space:]]+changes|review[[:space:]]+on[[:space:]]+my[[:space:]]+current[[:space:]]+changes)([[:space:][:punct:]]|$) ]]; then
+    return 1
+  fi
+  [[ "$text" =~ ^[[:space:]#\>\*\-]*(审查|审阅|复核|核验|验证)并(独立)?(修订|修改|封箱|封存|归档|提交|完成) ]]
+}
+
 is_primary_mini_prompt() {
   local text="$1"
   [[ "$text" =~ ^[[:space:]#\>\*\-]*(完成|封箱|归档|提交).*(交易日历|a[[:space:]_-]*share[[:space:]_-]*trading[[:space:]_-]*calendar|calendar).*(独立[[:space:]]*git[[:space:]]*封箱|git[[:space:]]*(封箱|暂存|提交)) ]]
@@ -229,9 +242,9 @@ is_calendar_general_body_prompt() {
   [[ "$text" =~ (交易日历.*(漏列|修复|恢复|补全).*(欠账|报告|盘点|归档|封箱)|(?:交易日历|a[[:space:]_-]*share[[:space:]_-]*trading[[:space:]_-]*calendar).*review_backlog_audit) ]]
 }
 
-# A Phase C P1/P2 repair or its follow-up verification is still
-# implementation-grade work even when the prompt says "review" or "read-only".
-# Keep this narrow so ordinary final reviews continue to use the 5.5 route.
+# A Phase C P1/P2 repair is implementation-grade work even when the prompt
+# says "review" or "read-only". After-repair verification remains a review
+# handoff so ordinary final reviews continue to use the 5.5 route.
 is_heavy_repair_verification_prompt() {
   local text="$1"
   [[ "$text" =~ phase[[:space:]_-]*c ]] || return 1
@@ -240,15 +253,16 @@ is_heavy_repair_verification_prompt() {
   if [[ "$text" =~ (修完后|修复后|修补后|整改后|after[[:space:]_-]+(fix|repair|remediat)).*(只核|核验|复查|复审|窄审|review|recheck|verification) ]]; then
     return 1
   fi
-  [[ "$text" =~ (二次|窄范围|只读核验|核验|复查|再审|second[[:space:]_-]+pass|verification|recheck) ]] ||
-    [[ "$text" =~ ^[[:space:]#\>\*\-]*(修复|修补|整改|fix|repair|remediat) ]]
+  return 0
 }
 
 if [[ "$route" == "auto" ]]; then
-  if is_primary_documentation_general_prompt "$prompt_title"; then
-    route="general"
-  elif is_heavy_repair_verification_prompt "$prompt_title"; then
+  if is_heavy_repair_verification_prompt "$prompt_title"; then
     route="heavy"
+  elif is_primary_workflow_general_prompt "$prompt_title"; then
+    route="general"
+  elif is_primary_documentation_general_prompt "$prompt_title"; then
+    route="general"
   elif is_explicit_review_prompt "$prompt_title"; then
     route="review"
   elif is_primary_heavy_prompt "$prompt_title"; then
