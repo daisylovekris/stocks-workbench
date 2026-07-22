@@ -110,6 +110,7 @@ def install_temp_repo_root(monkeypatch, tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     (repo / "data" / "daily").mkdir(parents=True)
     monkeypatch.setattr(runner, "REPO_ROOT", repo)
+    monkeypatch.setattr(runner.ofl, "DEFAULT_LOCK_DIR", repo / ".test-locks")
     return repo
 
 
@@ -1746,6 +1747,7 @@ def test_sensitive_candidate_key_is_rejected_and_stdout_is_sanitized(tmp_path, m
 
 def test_success_manifest_has_full_uuid_finished_stage_and_candidate_sha(tmp_path, monkeypatch):
     calendar = write_calendar(tmp_path / "calendar.json")
+    install_temp_repo_root(monkeypatch, tmp_path)
     patch_validator(monkeypatch)
     patch_generator(monkeypatch)
 
@@ -1760,6 +1762,26 @@ def test_success_manifest_has_full_uuid_finished_stage_and_candidate_sha(tmp_pat
     assert saved["official_sha256_after"] is None
     candidate_bytes = Path(saved["candidate_path"]).read_bytes()
     assert saved["candidate_sha256"] == runner.sha256_bytes(candidate_bytes)
+
+
+def test_dry_run_snapshot_isolated_from_outside_same_date_official(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    outside_official = tmp_path / "outside-repository" / "data" / "daily" / "300274_2026-07-16_facts.json"
+    outside_official.parent.mkdir(parents=True)
+    outside_official.write_text('{"outside": true}\n', encoding="utf-8")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    patch_validator(monkeypatch)
+    patch_generator(monkeypatch)
+
+    code, manifest = runner.execute(parse_args(tmp_path, calendar, "--now", "2026-07-16T15:25:00+08:00"))
+
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["official_path"] == str(repo / "data" / "daily" / "300274_2026-07-16_facts.json")
+    assert saved["official_sha256_before"] is None
+    assert saved["official_sha256_after"] is None
+    assert outside_official.read_text(encoding="utf-8") == '{"outside": true}\n'
+    assert (repo / ".test-locks").is_dir()
 
 
 def test_partial_manifest_is_finished_with_fetch_last_stage(tmp_path, monkeypatch):
