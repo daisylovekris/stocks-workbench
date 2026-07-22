@@ -132,11 +132,101 @@ is_primary_heavy_prompt() {
     [[ "$text" =~ ^[[:space:]#\>\*\-]*(implement|build|develop|refactor|migrate).*(phase[[:space:]_-]*[a-z]|runner|automation|pipeline|transaction|concurr) ]]
 }
 
+is_primary_documentation_general_prompt() {
+  local text="$1"
+  [[ "$text" =~ ^[[:space:]#\>\*\-]*(关闭|修正|更新|完成|修复).*(phase[[:space:]_-]*c|review[[:space:]_-]*manifest).*(规则文档.*p[12]|p[12].*规则文档).*(文档封箱|归档|提交) ]]
+}
+
+is_primary_mini_prompt() {
+  local text="$1"
+  [[ "$text" =~ ^[[:space:]#\>\*\-]*(完成|封箱|归档|提交).*(交易日历|a[[:space:]_-]*share[[:space:]_-]*trading[[:space:]_-]*calendar|calendar).*(独立[[:space:]]*git[[:space:]]*封箱|git[[:space:]]*(封箱|暂存|提交)) ]]
+}
+
 is_general_completion_prompt() {
   local text="$1"
   [[ "$text" =~ (完成|封箱|归档|提交).*(codex[[:space:]]*路由|路由规则|fable|外审|独立封箱|归档|封箱) ]] ||
     [[ "$text" =~ (codex[[:space:]]*路由|路由规则|fable|外审).*(完成|封箱|归档|提交) ]] ||
     [[ "$text" =~ \b(?:complete|archive|seal|commit)\b.*\b(?:codex[[:space:]_-]*routing|route|fable|external[[:space:]_-]*review)\b ]]
+}
+
+is_general_inventory_prompt() {
+  local text="$1"
+  [[ "$text" =~ (复盘欠账|只读盘点|欠账.*(盘点|清单|汇总)|read[-[:space:]]only.*(backlog|inventory)) ]]
+}
+
+is_body_heavy_prompt() {
+  local text="$1"
+  [[ "$text" =~ (^|[[:space:]#\>\*\-])(实现|新增|构建|开发|重构|施工|落地)[^。！？!?；]{0,160}(phase[[:space:]_-]*[a-z]|runner|运行器|自动化|流水线|review[[:space:]_-]*manifest|事务|并发) ]] ||
+    [[ "$text" =~ (^|[[:space:][:punct:]])(implement|build|develop|refactor|migrate)[^.!?\;]{0,160}(phase[[:space:]_-]*[a-z]|runner|automation|pipeline|review[[:space:]_-]*manifest|transaction|concurr) ]]
+}
+
+is_body_mini_prompt() {
+  local text="$1"
+  [[ "$text" =~ (交易日历|a[[:space:]_-]*share[[:space:]_-]*trading[[:space:]_-]*calendar|calendar) ]] || return 1
+  [[ "$text" =~ (独立[[:space:]]*git[[:space:]]*封箱|精确暂存与提交) ]] || return 1
+  [[ "$text" =~ (不生成[[:space:]]*facts|不执行[[:space:]]*git[[:space:]]*写操作) ]]
+}
+
+is_result_table_mini_prompt() {
+  local text="$1"
+  [[ "$text" =~ official_sha256_after ]] || return 1
+  [[ "$text" =~ runner_manifest_path ]] || return 1
+  [[ "$text" =~ 精确暂存与提交 ]] || return 1
+  [[ "$text" =~ (不生成[[:space:]]*facts|不执行[[:space:]]*git[[:space:]]*写操作) ]]
+}
+
+is_body_review_prompt() {
+  local text="$1"
+  [[ "$text" =~ 实际模型日志 ]] || return 1
+  [[ "$text" =~ p1/p2 ]] || return 1
+  [[ "$text" =~ 最终判定 ]] || return 1
+  [[ "$text" =~ (可封箱|暂缓封箱) ]]
+}
+
+is_body_seal_general_prompt() {
+  local text="$1"
+  [[ "$text" =~ 每(个|次)([[:space:]]*(commit|提交)[[:space:]]*)?前 ]] || return 1
+  [[ "$text" =~ 提交后验证 ]] || return 1
+  [[ "$text" =~ 不得[[:space:]]*push ]]
+}
+
+is_body_deterministic_general_prompt() {
+  local text="$1"
+  if [[ "$text" =~ (不写[[:space:]]*git|不执行[[:space:]]*git) ]] &&
+    [[ "$text" =~ 确定性审查链 ]] &&
+    [[ "$text" =~ 归档结果 ]]; then
+    return 0
+  fi
+  [[ "$text" =~ 只运行[[:space:]]*phase[[:space:]_-]*c.*review[[:space:]_-]*manifest.*流程 ]] || return 1
+  [[ "$text" =~ 不得修改.*phase[[:space:]_-]*a/b/c.*代码 ]] || return 1
+  [[ "$text" =~ (不得执行[[:space:]]*git[[:space:]]*写操作|不得执行[[:space:]]*git[[:space:]]+add) ]]
+}
+
+is_primary_seal_general_prompt() {
+  local text="$1"
+  [[ "$text" =~ ^[[:space:]#\>\*\-]*(完成|执行|进行).*(六日|facts|验证|归档).*(git|commit|提交).*(封箱|归档|提交) ]] ||
+    [[ "$text" =~ ^[[:space:]#\>\*\-]*(完成|执行|进行|归档|封箱|提交).*(六日|phase[[:space:]_-]*c|review[[:space:]_-]*manifest).*(验证|审计|报告|归档).*(git|commit|提交|封箱|归档) ]]
+}
+
+is_primary_phase_c_runtime_general_prompt() {
+  local text="$1"
+  [[ "$text" =~ ^[[:space:]#\>\*\-]*为.+(批量)?生成[[:space:]]*phase[[:space:]_-]*c.*deterministic[[:space:]_-]*review[[:space:]_-]*manifest ]]
+}
+
+is_calendar_general_prompt() {
+  local text="$1"
+  [[ "$text" =~ ^[[:space:]#\>\*\-]*(修复|恢复|补全|完成).*(交易日历|a[[:space:]_-]*share[[:space:]_-]*trading[[:space:]_-]*calendar|calendar).*(欠账|报告|盘点|归档|封箱) ]]
+}
+
+is_validation_general_prompt() {
+  local text="$1"
+  [[ "$text" =~ ^[[:space:]#\>\*\-]*(完成|执行|进行).*(六日|facts).*(独立验证|validator|核验).*(修复|隔离).*(runner|测试|真实仓库状态) ]] ||
+    [[ "$text" =~ ^[[:space:]#\>\*\-]*(运行|执行|完成).*(确定性|定向).*(验证|回归|审查链|归档) ]]
+}
+
+is_calendar_general_body_prompt() {
+  local text="$1"
+  [[ "$text" =~ (交易日历.*(漏列|修复|恢复|补全).*(欠账|报告|盘点|归档|封箱)|(?:交易日历|a[[:space:]_-]*share[[:space:]_-]*trading[[:space:]_-]*calendar).*review_backlog_audit) ]]
 }
 
 # A Phase C P1/P2 repair or its follow-up verification is still
@@ -155,23 +245,47 @@ is_heavy_repair_verification_prompt() {
 }
 
 if [[ "$route" == "auto" ]]; then
-  if is_heavy_repair_verification_prompt "$prompt_title"; then
+  if is_primary_documentation_general_prompt "$prompt_title"; then
+    route="general"
+  elif is_heavy_repair_verification_prompt "$prompt_title"; then
     route="heavy"
   elif is_explicit_review_prompt "$prompt_title"; then
     route="review"
   elif is_primary_heavy_prompt "$prompt_title"; then
     route="heavy"
+  elif is_primary_mini_prompt "$prompt_title"; then
+    route="mini"
+  elif is_primary_seal_general_prompt "$prompt_title"; then
+    route="general"
+  elif is_validation_general_prompt "$prompt_title"; then
+    route="general"
+  elif is_primary_phase_c_runtime_general_prompt "$prompt_title"; then
+    route="general"
+  elif is_calendar_general_prompt "$prompt_title"; then
+    route="general"
+  elif is_general_inventory_prompt "$prompt_title"; then
+    route="general"
   elif is_general_completion_prompt "$prompt_title"; then
     route="general"
-  elif is_explicit_review_prompt "$prompt_lc"; then
+  elif is_body_deterministic_general_prompt "$prompt_lc"; then
+    route="general"
+  elif is_body_seal_general_prompt "$prompt_lc"; then
+    route="general"
+  elif is_body_review_prompt "$prompt_lc"; then
     route="review"
-  elif [[ "$prompt_lc" =~ (多文件.*(修改|实现|施工|重构)|跨文件.*(修改|实现|施工|重构)|(架构|自动化|流水线).*(实现|施工|落地|重构)|(实现|施工|落地|重构).*(架构|自动化|流水线)|复杂(调试|修复|迁移|集成)|(实现|新增|构建).*(runner|运行器|自动化|流水线|生成器|调度器|流程)) ]]; then
+  elif is_body_mini_prompt "$prompt_lc" || is_result_table_mini_prompt "$prompt_lc"; then
+    route="mini"
+  elif is_calendar_general_body_prompt "$prompt_lc"; then
+    route="general"
+  elif is_body_heavy_prompt "$prompt_lc"; then
+    route="heavy"
+  elif [[ "$prompt_lc" =~ (多文件(修改|实现|施工|重构)|跨文件(修改|实现|施工|重构)|(架构|自动化|流水线)[^。！？!?；$'\n']{0,120}(实现|施工|落地|重构)|(实现|施工|落地|重构)[^。！？!?；$'\n']{0,120}(架构|自动化|流水线)|复杂(调试|修复|迁移|集成)) ]]; then
     route="heavy"
   elif is_general_completion_prompt "$prompt_lc"; then
     route="general"
   elif [[ "$conservative" == true ]]; then
     route="mini"
-  elif [[ "$prompt_lc" =~ (review[[:space:]_-]*route[[:space:]_-]*ok|多[[:space:]-]*card|multi[[:space:]-]*card|current/history|current[[:space:]-]*history|语义迁移|migration|p1/p2|p1[[:space:]-]*p2|架构文档|自动化流程设计|fable|integrat|sync|同步) ]]; then
+  elif [[ "$prompt_lc" =~ (review[[:space:]_-]*route[[:space:]_-]*ok|多[[:space:]-]*card|multi[[:space:]-]*card|current/history|current[[:space:]-]*history|语义迁移|migration|架构文档|自动化流程设计|fable|integrat|sync|同步) ]]; then
     route="review"
   elif [[ "$prompt_lc" =~ (常规(开发|修改|排查)|普通(开发|修改|排查)|少量跨文件) ]]; then
     route="general"
@@ -258,25 +372,37 @@ if not path.is_file():
     print("review log missing", file=sys.stderr)
     raise SystemExit(30)
 
-matches = []
+sessions = []
+active_session = None
 try:
     for line in path.read_text(encoding="utf-8").splitlines():
         record = json.loads(line)
-        if record.get("type") != "turn_context":
-            continue
         payload = record.get("payload")
-        if not isinstance(payload, dict) or payload.get("turn_id") != session_id:
+        if not isinstance(payload, dict):
             continue
-        matches.append(payload)
+        if record.get("type") == "session_meta":
+            active_session = {"meta": payload, "contexts": []}
+            sessions.append(active_session)
+        elif record.get("type") == "turn_context":
+            if active_session is not None:
+                active_session["contexts"].append(payload)
 except (OSError, UnicodeError, json.JSONDecodeError):
     print("review log unreadable", file=sys.stderr)
     raise SystemExit(30)
 
-if not matches:
-    print("current review session record missing", file=sys.stderr)
+matches = [
+    item for item in sessions
+    if item["meta"].get("session_id") == session_id or item["meta"].get("id") == session_id
+]
+if len(matches) != 1:
+    print("current review session record missing or ambiguous", file=sys.stderr)
+    raise SystemExit(30)
+contexts = matches[0]["contexts"]
+if not contexts:
+    print("current review session context missing", file=sys.stderr)
     raise SystemExit(30)
 
-current = matches[-1]
+current = contexts[-1]
 model = current.get("model")
 settings = current.get("collaboration_mode", {}).get("settings", {})
 effort = settings.get("reasoning_effort") or current.get("effort")
