@@ -12,7 +12,17 @@ official facts / Phase B runner manifest
 → review_index.jsonl 最终提交标记
 ```
 
-Phase C 不调用 LLM，不创建 `decisions.jsonl`，不安装或创建 launchd，不发送通知，不修改正式 review、current 卡、仓库 index、weekly、official facts 或 Git，不生成交易判断，不处理 `2026-07-15`。
+Phase C 不调用 LLM，不创建 `decisions.jsonl`，不安装或创建 launchd，不发送通知，不修改正式 review、current 卡、仓库 index、weekly、official facts 或 Git，也不生成交易判断。
+
+Phase C 只处理经明确授权的目标交易日，且目标日期必须存在于正式交易日历。每次生成还必须同时满足以下输入门：
+
+1. canonical official facts 已存在；
+2. 对该 canonical official facts 的现场 facts Validator 通过；
+3. 存在与当前 official SHA 匹配、合法的 Phase B runner manifest；
+4. runner manifest 的 `write_action`、`outcome` 与 `reason_code` 通过 Phase B 语义矩阵；
+5. official SHA 在最终提交的锁内复核仍一致。
+
+不得凭任意日期、旧 runner manifest 或归档报告生成 review。`2026-07-15` 在交易日历修复后，如同样满足上述授权与全部输入门，即为合法输入。
 
 人工决定留给 Phase D。Phase C 的代码和 schema 均不存在 `human_decision`、`human_notes`、`approved` 或 `rejected` 写入入口。
 
