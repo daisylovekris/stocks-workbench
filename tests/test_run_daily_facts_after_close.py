@@ -31,11 +31,51 @@ def write_calendar(
         or [
             "2026-07-13",
             "2026-07-14",
+            "2026-07-15",
             "2026-07-16",
         ],
     }
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     return path
+
+
+def test_repository_calendar_repairs_2026_07_15_omission():
+    calendar_path = runner.DEFAULT_CALENDAR
+    payload = json.loads(calendar_path.read_text(encoding="utf-8"))
+    days = payload["trading_days"]
+
+    assert payload["coverage_start"] == "2026-07-01"
+    assert payload["coverage_end"] == "2026-07-31"
+    assert payload["timezone"] == "Asia/Shanghai"
+    assert payload["source"] == "sse_szse_official_2026_holiday_notices_verified_2026-07-22"
+    assert payload["calendar_version"] == "2026-07-phase-a-2026-07-15-omission-fix-v1"
+    assert days == sorted(days)
+    assert len(days) == len(set(days))
+    index = days.index("2026-07-15")
+    assert days[index - 1 : index + 2] == ["2026-07-14", "2026-07-15", "2026-07-16"]
+    for weekend in (
+        "2026-07-04",
+        "2026-07-05",
+        "2026-07-11",
+        "2026-07-12",
+        "2026-07-18",
+        "2026-07-19",
+        "2026-07-25",
+        "2026-07-26",
+    ):
+        assert weekend not in days
+
+    calendar = runner.load_calendar(calendar_path)
+    for trading_day in (
+        "2026-07-15",
+        "2026-07-16",
+        "2026-07-17",
+        "2026-07-20",
+        "2026-07-21",
+        "2026-07-22",
+    ):
+        assert calendar.is_trading_day(runner.parse_trade_date(trading_day))
+    assert not calendar.is_trading_day(runner.parse_trade_date("2026-07-19"))
 
 
 def parse_args(tmp_path: Path, calendar: Path, *extra: str):
@@ -231,6 +271,37 @@ def test_normal_trading_day_after_close_runs_generator_dry_run(tmp_path, monkeyp
     assert Path(saved["candidate_path"]).exists()
 
 
+def test_repository_calendar_2026_07_15_today_after_close_and_manifest_hash(tmp_path, monkeypatch):
+    calendar = runner.DEFAULT_CALENDAR
+    patch_validator(monkeypatch)
+    calls = patch_generator(monkeypatch, stdout=generator_payload(source_date="2026-07-15"))
+
+    code, manifest = runner.execute(
+        parse_args(tmp_path, calendar, "--now", "2026-07-15T15:25:00+08:00")
+    )
+
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["outcome"] == "success"
+    assert saved["reason_code"] is None
+    assert saved["calendar"]["sha256"] == runner.sha256_bytes(calendar.read_bytes())
+    assert saved["calendar"]["version"] == "2026-07-phase-a-2026-07-15-omission-fix-v1"
+    assert len(calls) == 1
+
+
+def test_repository_calendar_2026_07_19_remains_non_trading_day(tmp_path, monkeypatch):
+    calendar = runner.DEFAULT_CALENDAR
+    calls = patch_generator(monkeypatch)
+
+    code, manifest = runner.execute(
+        parse_args(tmp_path, calendar, "--now", "2026-07-19T15:25:00+08:00")
+    )
+
+    assert code == 0
+    assert load_manifest(manifest)["reason_code"] == "non_trading_day"
+    assert calls == []
+
+
 def test_trading_day_before_close_skips(tmp_path, monkeypatch):
     calendar = write_calendar(tmp_path / "calendar.json")
     calls = patch_generator(monkeypatch)
@@ -251,7 +322,7 @@ def test_trading_day_before_close_skips(tmp_path, monkeypatch):
     ("now", "reason"),
     [
         ("2026-07-18T15:25:00+08:00", "non_trading_day"),
-        ("2026-07-15T15:25:00+08:00", "non_trading_day"),
+        ("2026-07-19T15:25:00+08:00", "non_trading_day"),
     ],
 )
 def test_non_trading_days_skip(tmp_path, monkeypatch, now, reason):
@@ -361,7 +432,7 @@ def test_historical_backfill_non_trading_day_skips(tmp_path, monkeypatch):
             "--mode",
             "historical_backfill",
             "--date",
-            "2026-07-15",
+            "2026-07-19",
             "--reason",
             "manual replay",
             "--now",
@@ -372,6 +443,34 @@ def test_historical_backfill_non_trading_day_skips(tmp_path, monkeypatch):
     assert code == 0
     assert load_manifest(manifest)["reason_code"] == "non_trading_day"
     assert calls == []
+
+
+def test_repository_calendar_historical_backfill_2026_07_15_passes_trading_day_gate(tmp_path, monkeypatch):
+    calendar = runner.DEFAULT_CALENDAR
+    patch_validator(monkeypatch)
+    calls = patch_generator(monkeypatch, stdout=generator_payload(source_date="2026-07-15"))
+
+    code, manifest = runner.execute(
+        parse_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-15",
+            "--reason",
+            "verified calendar omission repair",
+            "--now",
+            "2026-07-16T10:00:00+08:00",
+        )
+    )
+
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["target_date"] == "2026-07-15"
+    assert saved["outcome"] == "success"
+    assert saved["reason_code"] is None
+    assert len(calls) == 1
 
 
 def test_generator_partial_creates_alert_and_needs_manual_review(tmp_path, monkeypatch):
