@@ -98,9 +98,64 @@ def write_runner(
     return path
 
 
+def semantic_facts_pair(*, status: str = "partial") -> tuple[dict, dict]:
+    official = facts_payload(status=status, needs={"market_indices": True})
+    official["generated_at"] = "2026-07-16T08:00:00Z"
+    official["quote_verification"]["fetched_at"] = "2026-07-16T08:00:01Z"
+    official["run"]["fetched_at"] = "2026-07-16T08:00:02Z"
+    official["volume_ratio"]["five_day_volume_check"] = {"fetched_at": "2026-07-16T08:00:03Z"}
+    official["volume_ratio"]["snapshot_ohlc_check"] = {"fetched_at": "2026-07-16T08:00:04Z"}
+    official["volume_ratio"]["verification"]["fetched_at"] = "2026-07-16T08:00:05Z"
+    candidate = json.loads(json.dumps(official))
+    candidate["generated_at"] = "2026-07-16T09:00:00Z"
+    candidate["quote_verification"]["fetched_at"] = "2026-07-16T09:00:01Z"
+    candidate["run"]["fetched_at"] = "2026-07-16T09:00:02Z"
+    candidate["volume_ratio"]["five_day_volume_check"]["fetched_at"] = "2026-07-16T09:00:03Z"
+    candidate["volume_ratio"]["snapshot_ohlc_check"]["fetched_at"] = "2026-07-16T09:00:04Z"
+    candidate["volume_ratio"]["verification"]["fetched_at"] = "2026-07-16T09:00:05Z"
+    return official, candidate
+
+
+def write_semantic_runner(path: Path, *, official: Path, official_payload: dict, candidate: dict, **overrides) -> Path:
+    official_bytes = payload_bytes(official_payload)
+    candidate_bytes = payload_bytes(candidate)
+    candidate_path = path.parent / "candidate.json"
+    candidate_path.parent.mkdir(parents=True, exist_ok=True)
+    candidate_path.write_bytes(candidate_bytes)
+    official_sha = hashlib.sha256(official_bytes).hexdigest()
+    comparison = rm.oft.build_semantic_comparison(
+        candidate=candidate,
+        official=official_payload,
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol=SYMBOL,
+        target_date=TRADE_DATE,
+    )
+    manifest_overrides = {
+        "official_sha256_before": official_sha,
+        "official_sha256_after": official_sha,
+        "candidate_sha256": hashlib.sha256(candidate_bytes).hexdigest(),
+        "candidate_path": str(candidate_path),
+        "official_changed": False,
+        "official_bytes_equal_candidate": False,
+        "write_action": "semantic_noop",
+        "outcome": "official_unchanged",
+        "reason_code": "official_semantically_identical",
+        "comparison": comparison,
+    }
+    manifest_overrides.update(overrides)
+    return write_runner(
+        path,
+        official=official,
+        official_sha=official_sha,
+        **manifest_overrides,
+    )
+
+
 def options(tmp_path: Path, repo: Path, runner: Path | None, **overrides) -> rm.ReviewOptions:
     values = {
         "runtime_dir": tmp_path / "runtime",
+        "runner_runtime_dir": tmp_path,
         "symbol": SYMBOL,
         "trade_date": TRADE_DATE,
         "runner_manifest_path": runner,
@@ -120,6 +175,7 @@ def load_manifest(result: rm.ReviewResult) -> dict:
 @pytest.fixture(autouse=True)
 def pass_validator(monkeypatch):
     monkeypatch.setattr(rm, "_validator_result", lambda facts, official_path, trade_date: {"status": "passed"})
+    monkeypatch.setattr(rm.vrc, "assert_facts_pack_valid", lambda *args, **kwargs: None)
 
 
 def test_complete_is_ready_for_human_review(tmp_path):
@@ -146,6 +202,129 @@ def test_partial_is_needs_manual_review(tmp_path):
     manifest = load_manifest(rm.generate_review(options(tmp_path, repo, runner)))
     assert manifest["review_state"] == "needs_manual_review"
     assert "固定警示：本记录存在未决事项" in Path(manifest_path(tmp_path, manifest)).with_name("review_summary.md").read_text()
+
+
+def test_phase_c_accepts_valid_semantic_noop_and_is_idempotent(tmp_path):
+    official_payload, candidate = semantic_facts_pair()
+    official_bytes = payload_bytes(official_payload)
+    repo, official, sha = setup_repo(tmp_path, official_bytes=official_bytes)
+    runner = write_semantic_runner(
+        tmp_path / "runner-bundle" / "manifest.json",
+        official=official,
+        official_payload=official_payload,
+        candidate=candidate,
+    )
+
+    first = rm.generate_review(options(tmp_path, repo, runner))
+    manifest = load_manifest(first)
+    first_index = first.index_path.read_bytes()
+    second = rm.generate_review(options(tmp_path, repo, runner))
+
+    assert hashlib.sha256(official.read_bytes()).hexdigest() == sha
+    assert manifest["artifact_type"] == "facts_review"
+    assert manifest["review_state"] == "needs_manual_review"
+    assert manifest["write_action"] == "semantic_noop"
+    assert manifest["write_reason_code"] == "official_semantically_identical"
+    assert manifest["evidence_summary"]["semantic_comparison"]["semantic_equal"] is True
+    assert manifest["downstream_permissions"] == rm.DOWNSTREAM_PERMISSIONS
+    assert second.status == "review_already_exists"
+    assert second.index_path.read_bytes() == first_index
+    assert len(rm.read_index(second.index_path)) == 1
+
+
+def test_phase_c_rejects_tampered_semantic_sha(tmp_path):
+    official_payload, candidate = semantic_facts_pair()
+    repo, official, _sha = setup_repo(tmp_path, official_bytes=payload_bytes(official_payload))
+    runner = write_semantic_runner(
+        tmp_path / "runner-bundle" / "manifest.json",
+        official=official,
+        official_payload=official_payload,
+        candidate=candidate,
+    )
+    payload = json.loads(runner.read_text(encoding="utf-8"))
+    payload["comparison"]["candidate_semantic_sha256"] = "f" * 64
+    runner.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+    manifest = load_manifest(rm.generate_review(options(tmp_path, repo, runner)))
+    assert manifest["artifact_type"] == "incident_review"
+    assert manifest["incident_reason_code"] == "runner_manifest_invalid"
+    assert manifest["write_action"] is None
+
+
+def test_phase_c_rejects_missing_semantic_candidate(tmp_path):
+    official_payload, candidate = semantic_facts_pair()
+    repo, official, _sha = setup_repo(tmp_path, official_bytes=payload_bytes(official_payload))
+    runner = write_semantic_runner(
+        tmp_path / "runner-bundle" / "manifest.json",
+        official=official,
+        official_payload=official_payload,
+        candidate=candidate,
+    )
+    (runner.parent / "candidate.json").unlink()
+
+    manifest = load_manifest(rm.generate_review(options(tmp_path, repo, runner)))
+    assert manifest["artifact_type"] == "incident_review"
+    assert manifest["incident_reason_code"] == "runner_manifest_invalid"
+    assert manifest["write_action"] is None
+
+
+def test_phase_c_rejects_candidate_replaced_by_symlink_before_fd_open(tmp_path, monkeypatch):
+    official_payload, candidate = semantic_facts_pair()
+    repo, official, _sha = setup_repo(tmp_path, official_bytes=payload_bytes(official_payload))
+    runner = write_semantic_runner(
+        tmp_path / "runner-bundle" / "manifest.json",
+        official=official,
+        official_payload=official_payload,
+        candidate=candidate,
+    )
+    candidate_path = runner.parent / "candidate.json"
+    outside = tmp_path / "outside-candidate.json"
+    outside.write_bytes(candidate_path.read_bytes())
+    original_open = rm.os.open
+    replaced = False
+
+    def racing_open(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal replaced
+        if path == "candidate.json" and dir_fd is not None and not replaced:
+            replaced = True
+            candidate_path.unlink()
+            candidate_path.symlink_to(outside)
+        return original_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(rm.os, "open", racing_open)
+    manifest = load_manifest(rm.generate_review(options(tmp_path, repo, runner)))
+
+    assert replaced is True
+    assert manifest["artifact_type"] == "incident_review"
+    assert manifest["evidence_summary"]["runner_manifest_error"]["error_type"] == (
+        "runner_manifest_semantic_candidate_missing"
+    )
+    assert manifest["write_action"] is None
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"outcome": "partial"},
+        {"reason_code": "official_already_identical"},
+        {"official_changed": True},
+    ],
+)
+def test_phase_c_rejects_semantic_action_outcome_reason_mismatch(tmp_path, overrides):
+    official_payload, candidate = semantic_facts_pair()
+    repo, official, _sha = setup_repo(tmp_path, official_bytes=payload_bytes(official_payload))
+    runner = write_semantic_runner(
+        tmp_path / "runner-bundle" / "manifest.json",
+        official=official,
+        official_payload=official_payload,
+        candidate=candidate,
+        **overrides,
+    )
+
+    manifest = load_manifest(rm.generate_review(options(tmp_path, repo, runner)))
+    assert manifest["artifact_type"] == "incident_review"
+    assert manifest["incident_reason_code"] == "runner_manifest_invalid"
+    assert manifest["write_action"] is None
 
 
 def manifest_path(tmp_path: Path, manifest: dict) -> Path:
@@ -477,6 +656,24 @@ def test_existing_manifest_without_index_is_recovered(tmp_path):
     assert len(rm.read_index(second.index_path)) == 1
 
 
+def test_uncommitted_manifest_runner_sha_change_has_stable_diagnostic(tmp_path):
+    repo, official, sha = setup_repo(tmp_path)
+    runner = write_runner(tmp_path / "runner.json", official=official, official_sha=sha)
+    first = rm.generate_review(options(tmp_path, repo, runner))
+    first.index_path.write_bytes(b"")
+    runner_payload = json.loads(runner.read_text(encoding="utf-8"))
+    runner_payload["reason"] = "changed after review creation"
+    runner.write_text(json.dumps(runner_payload, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+    second = rm.generate_review(options(tmp_path, repo, runner))
+    manifest = load_manifest(second)
+
+    assert second.status == "review_created_after_invalid"
+    assert manifest["review_state"] == "needs_manual_review"
+    assert manifest["provenance"]["invalid_prior_manifest"]["invalid_reason"] == "runner_manifest_changed"
+    assert len(rm.read_index(second.index_path)) == 1
+
+
 @pytest.mark.parametrize("damage", ["missing", "broken"])
 def test_indexed_manifest_missing_or_damaged_creates_diagnostic_record(tmp_path, damage):
     repo, official, sha = setup_repo(tmp_path)
@@ -546,6 +743,40 @@ def test_summary_orphan_is_overwritten_and_committed(tmp_path):
     assert "orphan" not in (orphan / "review_summary.md").read_text(encoding="utf-8")
 
 
+def test_summary_orphan_after_first_replace_recovers_without_index_pollution(tmp_path, monkeypatch):
+    repo, official, sha = setup_repo(tmp_path)
+    runner = write_runner(tmp_path / "runner.json", official=official, official_sha=sha)
+    review_id = rm.review_id_for(SYMBOL, TRADE_DATE, sha)
+    orphan = tmp_path / "runtime" / "reviews" / TRADE_DATE / review_id
+    orphan.mkdir(parents=True)
+    (orphan / "review_summary.md").write_text("old orphan", encoding="utf-8")
+    original_replace = rm.os.replace
+    failed = False
+
+    def fail_manifest_replace_once(source, destination):
+        nonlocal failed
+        if Path(source).name == "review_manifest.json" and not failed:
+            failed = True
+            raise OSError("injected interruption between summary and manifest replace")
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(rm.os, "replace", fail_manifest_replace_once)
+    with pytest.raises(OSError, match="injected interruption"):
+        rm.generate_review(options(tmp_path, repo, runner))
+
+    index = orphan.parent / "review_index.jsonl"
+    assert failed is True
+    assert (orphan / "review_summary.md").exists()
+    assert not (orphan / "review_manifest.json").exists()
+    assert not index.exists()
+
+    recovered = rm.generate_review(options(tmp_path, repo, runner))
+    manifest = load_manifest(recovered)
+    assert recovered.status == "review_summary_orphan_recovered"
+    assert manifest["artifact_type"] == "facts_review"
+    assert len(rm.read_index(recovered.index_path)) == 1
+
+
 def test_official_sha_change_during_generation_cancels_commit(tmp_path):
     repo, official, sha = setup_repo(tmp_path)
     runner = write_runner(tmp_path / "runner.json", official=official, official_sha=sha)
@@ -553,6 +784,31 @@ def test_official_sha_change_during_generation_cancels_commit(tmp_path):
     result = rm.generate_review(options(tmp_path, repo, runner, before_final_recheck=lambda: official.write_bytes(changed)))
     assert result.status == "official_changed_during_generation"
     assert not (tmp_path / "runtime" / "reviews" / TRADE_DATE / rm.review_id_for(SYMBOL, TRADE_DATE, sha)).exists()
+    assert not (tmp_path / "runtime" / "reviews" / TRADE_DATE / "review_index.jsonl").exists()
+
+
+def test_official_symlink_replacement_inside_lock_is_rejected(tmp_path, monkeypatch):
+    repo, official, sha = setup_repo(tmp_path)
+    runner = write_runner(tmp_path / "runner.json", official=official, official_sha=sha)
+    outside = tmp_path / "outside-official.json"
+    outside.write_bytes(official.read_bytes())
+    original_open = rm.os.open
+    replaced = False
+
+    def racing_open(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal replaced
+        if path == official.name and dir_fd is not None and not replaced:
+            replaced = True
+            official.unlink()
+            official.symlink_to(outside)
+        return original_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(rm.os, "open", racing_open)
+    with pytest.raises(rm.ReviewError) as error:
+        rm.generate_review(options(tmp_path, repo, runner))
+
+    assert replaced is True
+    assert error.value.reason_code == "official_path_invalid"
     assert not (tmp_path / "runtime" / "reviews" / TRADE_DATE / "review_index.jsonl").exists()
 
 
@@ -786,6 +1042,43 @@ def test_runtime_inside_repository_is_rejected(tmp_path):
     with pytest.raises(rm.ReviewError) as error:
         rm.generate_review(options(tmp_path, repo, runner, runtime_dir=repo / "runtime"))
     assert error.value.reason_code == "runtime_inside_repository"
+
+
+@pytest.mark.parametrize("case", ["manifest_symlink", "parent_symlink", "root_escape"])
+def test_runner_manifest_symlink_chain_or_runtime_escape_is_rejected(tmp_path, case):
+    repo, official, sha = setup_repo(tmp_path)
+    allowed = tmp_path / "allowed-runner-runtime"
+    real_dir = allowed / "runs" / TRADE_DATE / "real"
+    runner = write_runner(real_dir / "manifest.json", official=official, official_sha=sha)
+    supplied = runner
+    if case == "manifest_symlink":
+        supplied = allowed / "manifest-link.json"
+        supplied.symlink_to(runner)
+    elif case == "parent_symlink":
+        alias = allowed / "runs" / TRADE_DATE / "alias"
+        alias.symlink_to(real_dir, target_is_directory=True)
+        supplied = alias / "manifest.json"
+    else:
+        supplied = write_runner(
+            tmp_path / "outside-runner-runtime" / "manifest.json",
+            official=official,
+            official_sha=sha,
+        )
+
+    manifest = load_manifest(
+        rm.generate_review(
+            options(
+                tmp_path,
+                repo,
+                supplied,
+                runner_runtime_dir=allowed,
+            )
+        )
+    )
+
+    assert manifest["artifact_type"] == "incident_review"
+    assert manifest["incident_reason_code"] == "runner_manifest_invalid"
+    assert manifest["evidence_summary"]["runner_manifest_error"]["error_type"] == "runner_manifest_path_invalid"
 
 
 def test_runtime_symlink_back_into_repository_is_rejected(tmp_path):

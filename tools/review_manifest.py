@@ -16,6 +16,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -157,6 +158,7 @@ class ReviewOptions:
     symbol: str
     trade_date: str
     runner_manifest_path: Path | None = None
+    runner_runtime_dir: Path | None = None
     rebuild_from_official: bool = False
     repo_root: Path = REPO_ROOT
     official_lock_dir: Path | None = None
@@ -195,6 +197,9 @@ PHASE_B_WRITE_SEMANTICS = {
     ),
     ("identical_noop", "official_written_manifest_failed"): PhaseBWriteSemantic(
         frozenset({"success", "partial"}), False, True
+    ),
+    ("semantic_noop", "official_semantically_identical"): PhaseBWriteSemantic(
+        frozenset({"official_unchanged"}), False, True
     ),
     ("conflict_blocked", "official_conflict"): PhaseBWriteSemantic(
         frozenset({"needs_manual_review"}), False, False
@@ -366,28 +371,135 @@ def fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
+def _absolute_lexical_path(path: Path) -> Path:
+    return Path(os.path.abspath(os.fspath(path.expanduser())))
+
+
+def _read_regular_file_beneath(
+    path: Path,
+    *,
+    root: Path,
+    reason_code: str,
+    label: str,
+    missing_ok: bool = False,
+) -> tuple[bytes | None, Path]:
+    """Read one regular file through an O_NOFOLLOW fd chain below ``root``."""
+
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise ReviewError(reason_code, f"{label} cannot be read safely on this platform")
+    root_path = _absolute_lexical_path(root)
+    target_path = _absolute_lexical_path(path)
+    if not _inside(target_path, root_path):
+        raise ReviewError(reason_code, f"{label} escapes its allowed root")
+    root_resolved = root_path.resolve(strict=False)
+    target_resolved = target_path.resolve(strict=False)
+    if not _inside(target_resolved, root_resolved):
+        raise ReviewError(reason_code, f"{label} resolves outside its allowed root")
+
+    relative = target_path.relative_to(root_path)
+    if not relative.parts:
+        raise ReviewError(reason_code, f"{label} must name a regular file below its allowed root")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    descriptors: list[int] = []
+    try:
+        current = os.open(root_path, directory_flags)
+        descriptors.append(current)
+        if not stat.S_ISDIR(os.fstat(current).st_mode):
+            raise ReviewError(reason_code, f"{label} allowed root is not a directory")
+        for component in relative.parts[:-1]:
+            current = os.open(component, directory_flags, dir_fd=current)
+            descriptors.append(current)
+            if not stat.S_ISDIR(os.fstat(current).st_mode):
+                raise ReviewError(reason_code, f"{label} parent is not a directory")
+        descriptor = os.open(relative.parts[-1], file_flags, dir_fd=current)
+        descriptors.append(descriptor)
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ReviewError(reason_code, f"{label} is not a regular file")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b"".join(chunks), target_path
+    except FileNotFoundError as exc:
+        if missing_ok:
+            return None, target_path
+        raise ReviewError(reason_code, f"{label} is missing") from exc
+    except ReviewError:
+        raise
+    except OSError as exc:
+        raise ReviewError(reason_code, f"{label} is unsafe or unreadable: {sanitize_text(exc)}") from exc
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
+def _read_locked_official(
+    official_path: Path,
+    *,
+    repo_root: Path,
+    lock_state: ofl.OfficialFactsLockState,
+) -> tuple[bytes | None, str | None]:
+    """Read official facts from one no-follow fd while the matching lock is held."""
+
+    try:
+        lock_state.assert_held_for(official_path)
+    except RuntimeError as exc:
+        raise ReviewError("official_path_invalid", sanitize_text(exc)) from exc
+    data, _path = _read_regular_file_beneath(
+        official_path,
+        root=repo_root,
+        reason_code="official_path_invalid",
+        label="official facts path",
+        missing_ok=True,
+    )
+    if data is None:
+        return None, None
+    return data, sha256_bytes(data)
+
+
 def load_runner_evidence(
     path: Path | None,
     *,
+    allowed_runtime_root: Path,
     symbol: str,
     trade_date: str,
     official_path: Path,
+    official_bytes: bytes,
+    official_sha256: str,
     required: bool,
+    expected_sha256: str | None = None,
 ) -> RunnerEvidence:
     if path is None:
         if required:
             raise ReviewError("runner_manifest_required", "a Phase B runner manifest is required")
         return RunnerEvidence(path=None, sha256=None, manifest=None)
-    resolved = path.expanduser().resolve(strict=False)
     try:
-        raw = resolved.read_bytes()
-    except OSError as exc:
+        raw, resolved = _read_regular_file_beneath(
+            path,
+            root=allowed_runtime_root,
+            reason_code="runner_manifest_path_invalid",
+            label="runner manifest path",
+        )
+        assert raw is not None
+    except ReviewError as exc:
         return RunnerEvidence(
-            path=resolved,
+            path=_absolute_lexical_path(path),
             sha256=None,
             manifest=None,
-            error_type="runner_manifest_unreadable",
+            error_type=exc.reason_code,
             error_message=sanitize_text(exc),
+        )
+    observed_sha256 = sha256_bytes(raw)
+    if expected_sha256 is not None and observed_sha256 != expected_sha256:
+        return RunnerEvidence(
+            path=resolved,
+            sha256=observed_sha256,
+            manifest=None,
+            error_type="runner_manifest_changed",
+            error_message="runner manifest SHA changed after the review manifest was created",
         )
     try:
         manifest = parse_json_object(raw, label="runner_manifest")
@@ -398,15 +510,25 @@ def load_runner_evidence(
             official_path=official_path,
             runner_manifest_path=resolved,
         )
+        if manifest.get("write_action") == "semantic_noop":
+            validate_semantic_noop_evidence(
+                manifest,
+                runner_manifest_path=resolved,
+                official_bytes=official_bytes,
+                official_sha256=official_sha256,
+                symbol=symbol,
+                trade_date=trade_date,
+                allowed_runtime_root=allowed_runtime_root,
+            )
     except ReviewError as exc:
         return RunnerEvidence(
             path=resolved,
-            sha256=sha256_bytes(raw),
+            sha256=observed_sha256,
             manifest=None,
             error_type=exc.reason_code,
             error_message=sanitize_text(exc),
         )
-    return RunnerEvidence(path=resolved, sha256=sha256_bytes(raw), manifest=manifest)
+    return RunnerEvidence(path=resolved, sha256=observed_sha256, manifest=manifest)
 
 
 def validate_runner_manifest(
@@ -512,6 +634,116 @@ def validate_runner_manifest(
             "runner_manifest_after_sha_mismatch",
             "runner manifest completed transaction has inconsistent candidate and after SHAs",
         )
+    if write_action == "semantic_noop":
+        comparison = manifest.get("comparison")
+        candidate_path = manifest.get("candidate_path")
+        if not isinstance(candidate_path, str) or not candidate_path:
+            raise ReviewError(
+                "runner_manifest_semantic_evidence_invalid",
+                "semantic_noop requires a candidate_path",
+            )
+        expected_candidate = runner_manifest_path.parent / "candidate.json"
+        if Path(candidate_path).expanduser().resolve(strict=False) != expected_candidate.resolve(strict=False):
+            raise ReviewError(
+                "runner_manifest_semantic_evidence_invalid",
+                "semantic_noop candidate_path must be the committed runner candidate",
+            )
+        if manifest.get("official_bytes_equal_candidate") is not False:
+            raise ReviewError(
+                "runner_manifest_semantic_evidence_invalid",
+                "semantic_noop requires raw candidate and official bytes to differ",
+            )
+        if not isinstance(comparison, dict):
+            raise ReviewError(
+                "runner_manifest_semantic_evidence_invalid",
+                "semantic_noop requires a comparison evidence object",
+            )
+        required_comparison = {
+            "comparison_mode",
+            "candidate_raw_sha256",
+            "official_raw_sha256",
+            "candidate_semantic_sha256",
+            "official_semantic_sha256",
+            "excluded_json_paths",
+            "excluded_values",
+            "semantic_equal",
+            "official_changed",
+        }
+        if set(comparison) != required_comparison:
+            raise ReviewError(
+                "runner_manifest_semantic_evidence_invalid",
+                "semantic_noop comparison fields are incomplete or unknown",
+            )
+        if (
+            comparison.get("comparison_mode") != oft.SEMANTIC_COMPARISON_MODE
+            or comparison.get("excluded_json_paths") != list(oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
+            or comparison.get("candidate_raw_sha256") != manifest.get("candidate_sha256")
+            or comparison.get("official_raw_sha256") != after_sha
+            or comparison.get("candidate_raw_sha256") == comparison.get("official_raw_sha256")
+            or comparison.get("semantic_equal") is not True
+            or comparison.get("official_changed") is not False
+            or comparison.get("candidate_semantic_sha256") != comparison.get("official_semantic_sha256")
+            or not isinstance(comparison.get("candidate_semantic_sha256"), str)
+            or not SHA_RE.fullmatch(comparison.get("candidate_semantic_sha256"))
+        ):
+            raise ReviewError(
+                "runner_manifest_semantic_evidence_invalid",
+                "semantic_noop comparison evidence is inconsistent",
+            )
+
+
+def validate_semantic_noop_evidence(
+    manifest: dict[str, Any],
+    *,
+    runner_manifest_path: Path,
+    official_bytes: bytes,
+    official_sha256: str,
+    symbol: str,
+    trade_date: str,
+    allowed_runtime_root: Path,
+) -> None:
+    """Recompute semantic_noop evidence from the committed candidate and official."""
+
+    candidate_bytes, candidate_path = _read_regular_file_beneath(
+        Path(str(manifest["candidate_path"])),
+        root=allowed_runtime_root,
+        reason_code="runner_manifest_semantic_candidate_missing",
+        label="semantic_noop candidate path",
+    )
+    assert candidate_bytes is not None
+    if sha256_bytes(candidate_bytes) != manifest.get("candidate_sha256"):
+        raise ReviewError(
+            "runner_manifest_semantic_candidate_sha_mismatch",
+            "semantic_noop candidate raw SHA does not match the runner manifest",
+        )
+    if sha256_bytes(official_bytes) != official_sha256 or official_sha256 != manifest.get("official_sha256_after"):
+        raise ReviewError(
+            "runner_manifest_semantic_official_sha_mismatch",
+            "semantic_noop current official SHA does not match the runner manifest",
+        )
+    candidate = parse_json_object(candidate_bytes, label="semantic_candidate")
+    official = parse_json_object(official_bytes, label="semantic_official")
+    try:
+        vrc.assert_facts_pack_valid(candidate, facts_pack_path=str(candidate_path), date=trade_date)
+        vrc.assert_facts_pack_valid(official, facts_pack_path=str(manifest.get("official_path")), date=trade_date)
+    except Exception as exc:  # noqa: BLE001 - semantic evidence fails closed
+        raise ReviewError(
+            "runner_manifest_semantic_validator_failed",
+            f"semantic_noop facts Validator failed: {sanitize_text(exc)}",
+        ) from exc
+    recomputed = oft.build_semantic_comparison(
+        candidate=candidate,
+        official=official,
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol=symbol,
+        target_date=trade_date,
+    )
+    if recomputed.get("semantic_equal") is not True or manifest.get("comparison") != recomputed:
+        raise ReviewError(
+            "runner_manifest_semantic_comparison_mismatch",
+            "semantic_noop comparison evidence does not match the live recomputation",
+        )
 
 
 def _validator_result(facts: dict[str, Any], *, official_path: Path, trade_date: str) -> dict[str, Any]:
@@ -591,7 +823,7 @@ def _postcheck_status(runner: dict[str, Any] | None) -> str:
         return "failed"
     if isinstance(after, dict) and after.get("status") == "passed":
         return "passed"
-    if runner.get("write_action") in {"created", "identical_noop", "conflict_blocked", "sealed_blocked", "manual_blocked"}:
+    if runner.get("write_action") in {"created", "identical_noop", "semantic_noop", "conflict_blocked", "sealed_blocked", "manual_blocked"}:
         return "passed"
     return "unknown"
 
@@ -626,7 +858,10 @@ def _incident_reason(
         )
         if (
             reason == "official_written_bytes_mismatch"
-            or runner.get("official_bytes_equal_candidate") is False
+            or (
+                runner.get("official_bytes_equal_candidate") is False
+                and action != "semantic_noop"
+            )
             or candidate_mismatch
         ):
             return "official_bytes_mismatch"
@@ -692,8 +927,8 @@ def build_review_manifest(
     complete = facts_status == "success" and not unresolved
     completed_official_transaction = (
         runner is not None
-        and runner.get("write_action") in {"created", "identical_noop"}
-        and runner.get("outcome") in {"success", "partial"}
+        and runner.get("write_action") in {"created", "identical_noop", "semantic_noop"}
+        and runner.get("outcome") in {"success", "partial", "official_unchanged"}
     )
     review_state = "ready_for_human_review"
     if (
@@ -731,6 +966,7 @@ def build_review_manifest(
         "official_bytes_equal_candidate": runner.get("official_bytes_equal_candidate") if runner else None,
         "official_post_write_error": _sanitized_copy(runner.get("official_post_write_error")) if runner else None,
         "runner_official_validator_after": _sanitized_copy(runner.get("official_validator_after")) if runner else None,
+        "semantic_comparison": _sanitized_copy(runner.get("comparison")) if runner else None,
     }
     manifest = {
         "schema_version": SCHEMA_VERSION,
@@ -1091,6 +1327,7 @@ def verify_uncommitted_manifest(
     official_bytes: bytes,
     official_sha256: str,
     official_path: Path,
+    runner_runtime_dir: Path,
     symbol: str,
     trade_date: str,
 ) -> None:
@@ -1104,11 +1341,24 @@ def verify_uncommitted_manifest(
     runner_path = Path(runner_value) if isinstance(runner_value, str) else None
     runner_evidence = load_runner_evidence(
         runner_path,
+        allowed_runtime_root=runner_runtime_dir,
         symbol=symbol,
         trade_date=trade_date,
         official_path=official_path,
+        official_bytes=official_bytes,
+        official_sha256=official_sha256,
         required=not rebuilt,
+        expected_sha256=(
+            str(manifest.get("runner_manifest_sha256"))
+            if manifest.get("runner_manifest_sha256") is not None
+            else None
+        ),
     )
+    if runner_evidence.error_type == "runner_manifest_changed":
+        raise ReviewError(
+            "runner_manifest_changed",
+            "runner manifest SHA changed after the uncommitted review manifest was created",
+        )
     try:
         generated_at = datetime.fromisoformat(str(manifest.get("generated_at")))
     except ValueError as exc:
@@ -1213,6 +1463,10 @@ def generate_review(options: ReviewOptions) -> ReviewResult:
     validate_identity(options.symbol, options.trade_date)
     runtime = normalize_runtime_dir(options.runtime_dir, repo_root=options.repo_root)
     prepare_runtime_dir(runtime, repo_root=options.repo_root)
+    runner_runtime = normalize_runtime_dir(
+        options.runner_runtime_dir or runtime,
+        repo_root=options.repo_root,
+    )
     official_path = canonical_official_path(options.repo_root, options.symbol, options.trade_date)
     if official_path.is_symlink() or official_path.parent.is_symlink():
         raise ReviewError("official_path_invalid", "official facts path must not be a symlink")
@@ -1221,14 +1475,21 @@ def generate_review(options: ReviewOptions) -> ReviewResult:
         if not acquired:
             return ReviewResult("review_generator_already_active", None, None, None, None, "review_generator_already_active")
         with ofl.official_facts_lock(official_path, lock_dir=options.official_lock_dir) as official_lock:
-            initial_bytes, initial_sha = ofl.read_current_official(official_path, lock_state=official_lock)
+            initial_bytes, initial_sha = _read_locked_official(
+                official_path,
+                repo_root=options.repo_root,
+                lock_state=official_lock,
+            )
         if initial_bytes is None or initial_sha is None:
             raise ReviewError("official_facts_missing", "canonical official facts do not exist")
         runner_evidence = load_runner_evidence(
             options.runner_manifest_path,
+            allowed_runtime_root=runner_runtime,
             symbol=options.symbol,
             trade_date=options.trade_date,
             official_path=official_path,
+            official_bytes=initial_bytes,
+            official_sha256=initial_sha,
             required=not options.rebuild_from_official,
         )
         trade_dir = runtime / "reviews" / options.trade_date
@@ -1276,7 +1537,11 @@ def generate_review(options: ReviewOptions) -> ReviewResult:
                 if options.before_final_recheck:
                     options.before_final_recheck()
                 with ofl.official_facts_lock(official_path, lock_dir=options.official_lock_dir) as official_lock:
-                    _bytes, final_sha = ofl.read_current_official(official_path, lock_state=official_lock)
+                    _bytes, final_sha = _read_locked_official(
+                        official_path,
+                        repo_root=options.repo_root,
+                        lock_state=official_lock,
+                    )
                     if final_sha != initial_sha:
                         return ReviewResult("official_changed_during_generation", None, None, index_path, None, "official_sha_changed")
                 return ReviewResult("review_already_exists", canonical_id, canonical_manifest_path, index_path, existing_manifest["review_state"])
@@ -1287,6 +1552,7 @@ def generate_review(options: ReviewOptions) -> ReviewResult:
                         official_bytes=initial_bytes,
                         official_sha256=initial_sha,
                         official_path=official_path,
+                        runner_runtime_dir=runner_runtime,
                         symbol=options.symbol,
                         trade_date=options.trade_date,
                     )
@@ -1302,7 +1568,11 @@ def generate_review(options: ReviewOptions) -> ReviewResult:
                 if options.before_final_recheck:
                     options.before_final_recheck()
                 with ofl.official_facts_lock(official_path, lock_dir=options.official_lock_dir) as official_lock:
-                    _bytes, final_sha = ofl.read_current_official(official_path, lock_state=official_lock)
+                    _bytes, final_sha = _read_locked_official(
+                        official_path,
+                        repo_root=options.repo_root,
+                        lock_state=official_lock,
+                    )
                     if final_sha != initial_sha:
                         return ReviewResult("official_changed_during_generation", None, None, index_path, None, "official_sha_changed")
                     entry = make_index_entry(
@@ -1330,7 +1600,11 @@ def generate_review(options: ReviewOptions) -> ReviewResult:
                 if options.before_final_recheck:
                     options.before_final_recheck()
                 with ofl.official_facts_lock(official_path, lock_dir=options.official_lock_dir) as official_lock:
-                    _bytes, final_sha = ofl.read_current_official(official_path, lock_state=official_lock)
+                    _bytes, final_sha = _read_locked_official(
+                        official_path,
+                        repo_root=options.repo_root,
+                        lock_state=official_lock,
+                    )
                     if final_sha != initial_sha:
                         return ReviewResult("official_changed_during_generation", None, None, index_path, None, "official_sha_changed")
                 diagnostic_manifest = valid_index[review_id]
@@ -1360,7 +1634,11 @@ def generate_review(options: ReviewOptions) -> ReviewResult:
             if options.before_final_recheck:
                 options.before_final_recheck()
             with ofl.official_facts_lock(official_path, lock_dir=options.official_lock_dir) as official_lock:
-                _final_bytes, final_sha = ofl.read_current_official(official_path, lock_state=official_lock)
+                _final_bytes, final_sha = _read_locked_official(
+                    official_path,
+                    repo_root=options.repo_root,
+                    lock_state=official_lock,
+                )
                 if final_sha != initial_sha:
                     return ReviewResult("official_changed_during_generation", None, None, index_path, None, "official_sha_changed")
                 if summary_orphan and final_dir == canonical_dir:

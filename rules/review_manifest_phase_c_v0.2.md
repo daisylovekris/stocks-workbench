@@ -22,6 +22,17 @@ Phase C 只处理经明确授权的目标交易日，且目标日期必须存在
 4. runner manifest 的 `write_action`、`outcome` 与 `reason_code` 通过 Phase B 语义矩阵；
 5. official SHA 在最终提交的锁内复核仍一致。
 
+Phase C 接受的 semantic no-op 组合仅为：
+
+```text
+write_action=semantic_noop
+outcome=official_unchanged
+reason_code=official_semantically_identical
+official_changed=false
+```
+
+处理该组合时，Phase C 必须从 runner manifest 同目录读取 committed `candidate.json`，核验 candidate raw SHA 与当前 official raw SHA，现场对双方运行 facts Validator，并使用 Phase B 同一精确白名单与确定性序列化重新计算完整 comparison。candidate 缺失、symlink、SHA 不符、comparison 被篡改、白名单不一致、semantic SHA 不同或出现额外业务差异时，一律按非法 runner evidence fail-closed，不得生成正常 `facts_review`。
+
 不得凭任意日期、旧 runner manifest 或归档报告生成 review。`2026-07-15` 在交易日历修复后，如同样满足上述授权与全部输入门，即为合法输入。
 
 人工决定留给 Phase D。Phase C 的代码和 schema 均不存在 `human_decision`、`human_notes`、`approved` 或 `rejected` 写入入口。
@@ -47,12 +58,14 @@ data/daily/<symbol>_<trade_date>_facts.json
 
 official 文件或其规范父目录为 symlink 时失败关闭。
 
+Phase B runner manifest 必须位于同一受控 runtime 根内；manifest 本身、从 runtime 根到 manifest 的任一父目录及其同目录 committed `candidate.json` 均不得为 symlink，也不得解析越出 runtime 根。Phase C 对 runner manifest、candidate 与锁内 official 的读取必须逐级使用 `O_NOFOLLOW` 打开目录/文件、以 `fstat` 确认为常规文件，并只从同一文件描述符读取字节；不得以 `is_symlink → resolve → read_bytes` 的路径级检查代替对象身份保护。
+
 ## 3. 权威输入与禁止来源
 
 只认以下三类输入：
 
 1. 在 Phase B 共享 official lock 内读取的原始 official bytes 与现场自算 SHA-256；
-2. schema、身份、模式、official 路径与 SHA 字段校验通过的 `runner_manifest_v0.2_phase_b`；
+2. schema、身份、模式、official 路径与 SHA 字段校验通过的 `runner_manifest_v0.2_phase_b`；`semantic_noop` 还必须带可现场复算的 committed candidate 与 comparison；
 3. 对当前 official bytes 现场调用 `validate_review_chain.assert_facts_pack_valid` 的结果。
 
 禁止从 stdout、stderr、summary、alert、LLM 文本、环境变量、命令行事实参数或与当前 official SHA 不一致的 runner manifest 提取事实。命令行只提供 `symbol`、`trade_date`、runtime 和输入文件位置，不提供 quote、missing 或 confirmed 字段。
