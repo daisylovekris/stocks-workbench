@@ -17,7 +17,7 @@ python3 tools/run_daily_facts_after_close.py --write-official ...
 
 正式写入链路为：
 
-时间与交易日门 → runner 单实例锁 → generator dry-run 候选 → marker 解析 → 候选身份门 → facts Validator → partial 写入策略 → official facts 排他锁 → 锁内重读 official → 创建或安全跳过 → 原子写入 → 写后 Validator/SHA → runtime bundle 最终提交。
+时间与交易日门 → runner 单实例锁 → 锁内扫描并现场验证 previous-run completion → generator dry-run 候选 → marker 解析 → 候选身份门 → facts Validator → partial 写入策略 → official facts 排他锁 → 锁内重读 official → 创建或安全跳过 → 原子写入 → 写后 Validator/SHA → runtime bundle 最终提交。
 
 runner 仍只以 `--dry-run --emit-runner-marker` 调用 generator 产出候选；runner 不让 generator 二次抓取。
 
@@ -63,9 +63,21 @@ runtime 与 candidate 仍写入仓库外 runtime run 目录。
 
 - official 不存在：候选满足全部准入门后允许创建。
 - official 已存在且字节相同：不重写，`write_action=identical_noop`，`reason_code=official_already_identical`。
+- official 已存在且原始字节不同，但双方 facts Validator 均通过、身份字段一致、仅下列六个精确时间戳路径不同，删除这些路径后的确定性 JSON 完全相同：不重写，`write_action=semantic_noop`、`outcome=official_unchanged`、`reason_code=official_semantically_identical`、`official_changed=false`。
 - official 已存在但内容不同：默认禁止覆盖，`write_action=conflict_blocked`，`reason_code=official_conflict`。
 - sealed official：始终禁止自动覆盖，`write_action=sealed_blocked`，`reason_code=sealed_exists`。
 - manual official：始终禁止自动覆盖，`write_action=manual_blocked`，`reason_code=manual_exists`。
+
+`semantic_noop` 的排除白名单固定且不可递归扩张：
+
+- `generated_at`
+- `quote_verification.fetched_at`
+- `run.fetched_at`
+- `volume_ratio.five_day_volume_check.fetched_at`
+- `volume_ratio.snapshot_ohlc_check.fetched_at`
+- `volume_ratio.verification.fetched_at`
+
+六个路径必须在双方均存在、值均为带时区的合法 ISO datetime 字符串。`symbol`、`trade_date`、`schema_version` 必须相同。删除六个路径后，结构和值必须完全相同；其他 `fetched_at`、未知字段、missing、needs_manual_check 或任何业务字段均不得忽略。任一条件不满足即 `conflict_blocked`。
 
 Phase B 不实现自动择优覆盖、字段合并或旧产物迁移。
 
@@ -83,6 +95,13 @@ Phase B manifest 记录：
 - `partial_write_policy`
 - `official_validator_before`
 - `official_validator_after`
+- `comparison`
+- `manifest_bundle_failed`
+- `manifest_bundle_reason_code`
+
+`semantic_noop` 的 `comparison` 必须记录 raw SHA、semantic SHA、精确排除路径、双方排除值类型检查、ISO datetime 检查、`semantic_equal` 与 `official_changed=false`。semantic SHA 使用 UTF-8、`sort_keys=true`、固定 separators、无缩进换行的确定性 JSON 序列化；不得覆盖既有 raw SHA 字段。
+
+`generate_daily_facts.py` 的 `RunOutcome.wrote_file` 与 CLI 同名字段只表示本轮是否真实创建或替换 official bytes，必须与 transaction 的 `official_changed` 一致。`identical_noop` 与 `semantic_noop` 均为 `wrote_file=false`；完成/冲突语义不得借该布尔值表达，仍以 `write_action`、`outcome` 与 `reason_code` 为准。
 
 runtime bundle 仍按 Phase A 顺序写入：
 
@@ -94,7 +113,19 @@ manifest 是最终提交标记。若 official 已成功写入但最终 runtime b
 
 dry-run success 永远不算正式完成。
 
-只有 `write_official=true` 且 `write_action=created/identical_noop` 的合法正式 manifest 才算正式完成记录。partial official 记录为已落盘，但仍需要人工补全。
+只有成功、完整且现场证据仍成立的 `created`、`identical_noop` 或 `semantic_noop` 正式 manifest 才算完成记录。completion validator 属于 Phase B，并与 Phase C 共用 Phase B action/outcome/reason 矩阵；Phase B 不依赖 `tools/review_manifest.py`。
+
+通用完成门要求：`schema_version=runner_manifest_v0.2_phase_b`、`stage=finished`、带时区 `finished_at`、`outcome!=failed`、`manifest_bundle_failed` 未置真、`write_official=true`、`dry_run=false`，且 symbol、target_date、mode、run_id、manifest/candidate/official 规范路径身份一致。candidate 与当前 official 必须通过安全 no-follow fd 读取；字节、SHA 与 JSON 解析来自同一读取对象；双方必须现场通过 facts Validator；当前 official 在共享 official lock 内读取。
+
+分动作完成门：
+
+- `created`：仅接受 `official_written/success` 或 `official_written_partial/partial`，`official_changed=true`，before SHA 为空，after SHA 等于 candidate SHA，当前 official SHA 等于 after SHA，candidate 与 official 原始字节相同。
+- `identical_noop`：仅接受 `official_already_identical` 与候选 facts 状态一致的 outcome，`official_changed=false`、`official_bytes_equal_candidate=true`，before SHA、after SHA、candidate SHA 与当前 official SHA 全部相等。
+- `semantic_noop`：仅接受 `official_unchanged/official_semantically_identical`，`official_changed=false`、`official_bytes_equal_candidate=false`，before SHA 等于 after SHA 且不同于 candidate raw SHA；committed `candidate.json` 必须仍存在并匹配 candidate SHA；`comparison` 字段全集、六条排除路径及顺序必须精确一致，raw/semantic SHA 关系合法，`semantic_equal=true`；最后用共享 `build_semantic_comparison()` 对现场 candidate/official 字节重算并与 manifest 逐字段相等。
+
+previous-run scan 必须在 runner lock 内执行。非法或失效的 matching manifest 不计完成，按路径与稳定 reason code 写入 `scan_diagnostics`，然后允许 generator 与 official transaction 重新运行。candidate 丢失、符号链接替换、路径逃逸、内容篡改或 current official 漂移均按此处理。
+
+任何 `outcome=failed`、`manifest_bundle_failed=true` 或 `manifest_write_failed` 记录只保留为运行审计及 Phase C incident evidence，不扩展为正常 `facts_review`，也不得阻断安全重跑。partial official 或 `official_unchanged` 记录不代表人工批准，仍按 facts 未决项进入审查。
 
 official 文件存在但 manifest 缺失时，不猜测完成状态；下一次正式运行必须读取并验证 official 后输出创建、相同 no-op 或冲突诊断。损坏 manifest 不阻断安全重跑；同一任务的最新合法正式记录才参与幂等。
 

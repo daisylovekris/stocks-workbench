@@ -1858,7 +1858,7 @@ def write_generated_facts_transaction(
             lock_dir=lock_dir,
             enforce_canonical_path=True,
         )
-        should_write = result.write_action in {"created", "identical_noop"}
+        should_write = result.official_changed
         final_sha256 = result.official_sha256_after
     elif should_write:
         should_write = False

@@ -16,7 +16,6 @@ import json
 import os
 import re
 import shutil
-import stat
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -28,6 +27,8 @@ from zoneinfo import ZoneInfo
 try:
     from tools import official_facts_lock as ofl
     from tools import official_facts_transaction as oft
+    from tools import phase_b_completion as pbc
+    from tools import safe_file_read as sfr
     from tools import validate_review_chain as vrc
 except ModuleNotFoundError:  # pragma: no cover - direct execution fallback
     import sys
@@ -35,6 +36,8 @@ except ModuleNotFoundError:  # pragma: no cover - direct execution fallback
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from tools import official_facts_lock as ofl
     from tools import official_facts_transaction as oft
+    from tools import phase_b_completion as pbc
+    from tools import safe_file_read as sfr
     from tools import validate_review_chain as vrc
 
 
@@ -176,55 +179,7 @@ class ReviewResult:
     reason_code: str | None = None
 
 
-@dataclass(frozen=True)
-class PhaseBWriteSemantic:
-    outcomes: frozenset[str]
-    official_changed: bool
-    after_sha_required: bool
-
-
-# Extracted from official_facts_transaction.promote_candidate_to_official(),
-# run_daily_facts_after_close.py, and run_daily_facts_after_close_phase_b_v0.2.md.
-# Keep this as the single Phase C gate for Phase B's existing transaction names.
-PHASE_B_WRITE_SEMANTICS = {
-    ("created", "official_written"): PhaseBWriteSemantic(frozenset({"success"}), True, True),
-    ("created", "official_written_partial"): PhaseBWriteSemantic(frozenset({"partial"}), True, True),
-    ("created", "official_written_manifest_failed"): PhaseBWriteSemantic(
-        frozenset({"success", "partial"}), True, True
-    ),
-    ("identical_noop", "official_already_identical"): PhaseBWriteSemantic(
-        frozenset({"success", "partial"}), False, True
-    ),
-    ("identical_noop", "official_written_manifest_failed"): PhaseBWriteSemantic(
-        frozenset({"success", "partial"}), False, True
-    ),
-    ("semantic_noop", "official_semantically_identical"): PhaseBWriteSemantic(
-        frozenset({"official_unchanged"}), False, True
-    ),
-    ("conflict_blocked", "official_conflict"): PhaseBWriteSemantic(
-        frozenset({"needs_manual_review"}), False, False
-    ),
-    ("conflict_blocked", "official_invalid"): PhaseBWriteSemantic(
-        frozenset({"needs_manual_review"}), False, False
-    ),
-    ("sealed_blocked", "sealed_exists"): PhaseBWriteSemantic(frozenset({"skipped"}), False, True),
-    ("manual_blocked", "manual_exists"): PhaseBWriteSemantic(frozenset({"skipped"}), False, True),
-    ("not_eligible", "partial_not_eligible_for_official"): PhaseBWriteSemantic(
-        frozenset({"needs_manual_review"}), False, False
-    ),
-    ("not_eligible", "validator_failed"): PhaseBWriteSemantic(
-        frozenset({"needs_manual_review"}), False, False
-    ),
-    ("not_eligible", "candidate_not_eligible_for_official"): PhaseBWriteSemantic(
-        frozenset({"needs_manual_review"}), False, False
-    ),
-    ("created_postcheck_failed", "official_written_postcheck_failed"): PhaseBWriteSemantic(
-        frozenset({"needs_manual_review"}), True, False
-    ),
-    ("created_postcheck_failed", "official_written_bytes_mismatch"): PhaseBWriteSemantic(
-        frozenset({"needs_manual_review"}), True, False
-    ),
-}
+PHASE_B_WRITE_SEMANTICS = pbc.PHASE_B_WRITE_SEMANTICS
 
 
 def sanitize_text(value: object, *, limit: int = 1000) -> str:
@@ -383,57 +338,12 @@ def _read_regular_file_beneath(
     label: str,
     missing_ok: bool = False,
 ) -> tuple[bytes | None, Path]:
-    """Read one regular file through an O_NOFOLLOW fd chain below ``root``."""
+    """Read one regular file through the shared no-follow fd helper."""
 
-    if not hasattr(os, "O_NOFOLLOW"):
-        raise ReviewError(reason_code, f"{label} cannot be read safely on this platform")
-    root_path = _absolute_lexical_path(root)
-    target_path = _absolute_lexical_path(path)
-    if not _inside(target_path, root_path):
-        raise ReviewError(reason_code, f"{label} escapes its allowed root")
-    root_resolved = root_path.resolve(strict=False)
-    target_resolved = target_path.resolve(strict=False)
-    if not _inside(target_resolved, root_resolved):
-        raise ReviewError(reason_code, f"{label} resolves outside its allowed root")
-
-    relative = target_path.relative_to(root_path)
-    if not relative.parts:
-        raise ReviewError(reason_code, f"{label} must name a regular file below its allowed root")
-    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
-    file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
-    descriptors: list[int] = []
     try:
-        current = os.open(root_path, directory_flags)
-        descriptors.append(current)
-        if not stat.S_ISDIR(os.fstat(current).st_mode):
-            raise ReviewError(reason_code, f"{label} allowed root is not a directory")
-        for component in relative.parts[:-1]:
-            current = os.open(component, directory_flags, dir_fd=current)
-            descriptors.append(current)
-            if not stat.S_ISDIR(os.fstat(current).st_mode):
-                raise ReviewError(reason_code, f"{label} parent is not a directory")
-        descriptor = os.open(relative.parts[-1], file_flags, dir_fd=current)
-        descriptors.append(descriptor)
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise ReviewError(reason_code, f"{label} is not a regular file")
-        chunks: list[bytes] = []
-        while True:
-            chunk = os.read(descriptor, 1024 * 1024)
-            if not chunk:
-                break
-            chunks.append(chunk)
-        return b"".join(chunks), target_path
-    except FileNotFoundError as exc:
-        if missing_ok:
-            return None, target_path
-        raise ReviewError(reason_code, f"{label} is missing") from exc
-    except ReviewError:
-        raise
-    except OSError as exc:
-        raise ReviewError(reason_code, f"{label} is unsafe or unreadable: {sanitize_text(exc)}") from exc
-    finally:
-        for descriptor in reversed(descriptors):
-            os.close(descriptor)
+        return sfr.read_regular_file_beneath(path, root=root, label=label, missing_ok=missing_ok)
+    except sfr.SafeFileReadError as exc:
+        raise ReviewError(reason_code, sanitize_text(exc)) from exc
 
 
 def _read_locked_official(

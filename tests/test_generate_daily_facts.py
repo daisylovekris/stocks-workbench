@@ -1808,6 +1808,44 @@ class GenerateDailyFactsTests(unittest.TestCase):
             self.assertTrue(official.exists())
             self.assertEqual(outcome.output_sha256, gdf.ofl.sha256_file(official))
 
+    def test_write_official_wrote_file_tracks_actual_official_change(self):
+        volume_candidate = {
+            "candidate_value": 1.79,
+            "source": "pytest",
+            "source_date": "2026-07-10",
+            "fetched_at": "2026-07-13T00:00:00Z",
+            "method": "historical_five_day_volume_cross_check",
+            "verification_status": "confirmed",
+            "confirmed_by": "pytest",
+        }
+        cases = (
+            ("created", True, True),
+            ("created_postcheck_failed", True, True),
+            ("identical_noop", False, False),
+            ("semantic_noop", False, False),
+        )
+        for write_action, official_changed, expected_wrote_file in cases:
+            with self.subTest(write_action=write_action), tempfile.TemporaryDirectory() as tmpdir:
+                repo = Path(tmpdir) / "repo"
+                args = make_args(output=None, source="tencent", write_partial=True, write_official=True)
+                result = mock.Mock(
+                    write_action=write_action,
+                    official_changed=official_changed,
+                    official_sha256_after="a" * 64,
+                )
+                with (
+                    mock.patch.object(gdf, "REPO_ROOT", repo),
+                    mock.patch.object(gdf, "validate_generated_facts_pack", lambda *_args, **_kwargs: None),
+                    mock.patch.object(gdf.oft, "promote_candidate_to_official", return_value=result),
+                ):
+                    outcome = gdf.run(
+                        args,
+                        fetch_primary=make_fetcher(load_fixture("tencent_quote_0710.json")),
+                        fetch_fallback=make_error_fetcher("source_error", "unused"),
+                        volume_ratio_candidate_provider=lambda *_args: volume_candidate,
+                    )
+                self.assertIs(outcome.wrote_file, expected_wrote_file)
+
     def test_write_official_rejects_noncanonical_symbol_and_date(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir) / "repo"

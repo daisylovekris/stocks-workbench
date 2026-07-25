@@ -32,11 +32,15 @@ from zoneinfo import ZoneInfo
 try:
     from tools import official_facts_lock as ofl
     from tools import official_facts_transaction as oft
+    from tools import phase_b_completion as pbc
+    from tools import safe_file_read as sfr
     from tools import validate_review_chain as vrc
 except ModuleNotFoundError:  # pragma: no cover - direct execution fallback
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from tools import official_facts_lock as ofl
     from tools import official_facts_transaction as oft
+    from tools import phase_b_completion as pbc
+    from tools import safe_file_read as sfr
     from tools import validate_review_chain as vrc
 
 
@@ -360,16 +364,25 @@ def scan_previous_runs(
     symbol: str,
     mode: str,
     write_official: bool = True,
+    repo_root: Path | None = None,
+    official_path: Path | None = None,
+    official_lock_dir: Path | None = None,
 ) -> tuple[str | None, str | None, list[dict[str, str]]]:
     runs_dir = runtime_dir / "runs" / target_date.isoformat()
     diagnostics: list[dict[str, str]] = []
     if not runs_dir.exists():
         return None, None, diagnostics
-    matching: list[tuple[datetime, str, dict[str, Any]]] = []
+    matching: list[tuple[datetime, str, dict[str, Any], Path]] = []
     for manifest_path in sorted(runs_dir.glob("*/manifest.json")):
         try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            raw, safe_manifest_path = sfr.read_regular_file_beneath(
+                manifest_path,
+                root=runtime_dir,
+                label="previous runner manifest",
+            )
+            assert raw is not None
+            manifest = json.loads(raw.decode("utf-8"))
+        except (sfr.SafeFileReadError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             diagnostics.append(
                 {
                     "path": str(manifest_path),
@@ -385,24 +398,81 @@ def scan_previous_runs(
             or manifest.get("symbol") != symbol
             or manifest.get("mode") != mode
         ):
+            if write_official:
+                diagnostics.append(
+                    {
+                        "path": str(manifest_path),
+                        "reason": "completion invalid: completion_identity_mismatch",
+                    }
+                )
             continue
         current_id = manifest.get("run_id")
         timestamp = _manifest_timestamp(manifest)
         if not isinstance(current_id, str) or not current_id or timestamp is None:
             diagnostics.append({"path": str(manifest_path), "reason": "incomplete matching manifest skipped"})
             continue
-        matching.append((timestamp, current_id, manifest))
+        matching.append((timestamp, current_id, manifest, safe_manifest_path))
     if not matching:
         return None, None, diagnostics
     matching.sort(key=lambda item: (item[0], item[1]))
     previous_run_id = matching[-1][1]
-    completed = any(
-        manifest.get("write_official") is True
-        and manifest.get("dry_run") is False
-        and manifest.get("write_action") in {"created", "identical_noop"}
-        for _, _, manifest in matching
-    )
     if not write_official:
+        return None, previous_run_id, diagnostics
+
+    effective_repo_root = repo_root or REPO_ROOT
+    effective_official_path = official_path or official_path_for(symbol, target_date)
+    try:
+        with ofl.official_facts_lock(effective_official_path, lock_dir=official_lock_dir) as lock_state:
+            try:
+                official_bytes, _safe_path = sfr.read_regular_file_beneath(
+                    effective_official_path,
+                    root=effective_repo_root,
+                    label="completion official facts",
+                    missing_ok=True,
+                )
+            except sfr.SafeFileReadError as exc:
+                official_bytes = None
+                official_read_error = sanitize_text(exc)
+            else:
+                official_read_error = None
+            lock_state.assert_held_for(effective_official_path)
+            official_sha = sha256_bytes(official_bytes) if official_bytes is not None else None
+            completed = False
+            for _, _, manifest, manifest_path in matching:
+                try:
+                    if official_read_error is not None:
+                        raise pbc.CompletionValidationError(
+                            "completion_official_unreadable",
+                            official_read_error,
+                        )
+                    pbc.validate_completion_manifest(
+                        manifest,
+                        manifest_path=manifest_path,
+                        runtime_dir=runtime_dir,
+                        repo_root=effective_repo_root,
+                        symbol=symbol,
+                        target_date=target_date.isoformat(),
+                        mode=mode,
+                        official_path=effective_official_path,
+                        official_bytes=official_bytes,
+                        official_sha256=official_sha,
+                    )
+                except pbc.CompletionValidationError as exc:
+                    diagnostics.append(
+                        {
+                            "path": str(manifest_path),
+                            "reason": f"completion invalid: {exc.reason_code}",
+                        }
+                    )
+                else:
+                    completed = True
+    except Exception as exc:  # noqa: BLE001 - completion evidence fails open to a safe rerun
+        diagnostics.append(
+            {
+                "path": str(effective_official_path),
+                "reason": sanitize_text(f"completion official lock/read failed: {type(exc).__name__}"),
+            }
+        )
         completed = False
     return ("already_completed" if completed else None), previous_run_id, diagnostics
 
@@ -689,12 +759,15 @@ def manifest_base(
         "official_changed": False,
         "official_bytes_equal_candidate": None,
         "official_post_write_error": None,
+        "comparison": None,
         "validator": {"status": "not_run"},
         "retry_count": 0,
         "alerts": [],
         "exception": None,
         "previous_run_id": previous_run_id,
         "scan_diagnostics": [],
+        "manifest_bundle_failed": False,
+        "manifest_bundle_reason_code": None,
         "runtime_dir": str(ctx.runtime_dir),
         "manifest_path": str(ctx.manifest_path),
     }
@@ -758,6 +831,7 @@ def summary_markdown(manifest: dict[str, Any]) -> str:
             f"- official_sha256_after: `{manifest.get('official_sha256_after')}`",
             f"- official_changed: `{manifest.get('official_changed')}`",
             f"- official_bytes_equal_candidate: `{manifest.get('official_bytes_equal_candidate')}`",
+            f"- comparison_mode: `{(manifest.get('comparison') or {}).get('comparison_mode')}`",
             f"- generator_exit_code: `{manifest.get('generator', {}).get('exit_code')}`",
             f"- generator_result_status: `{manifest.get('generator', {}).get('result_status')}`",
             f"- validator_status: `{manifest.get('validator', {}).get('status')}`",
@@ -945,23 +1019,36 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
             finish_manifest(manifest, started_monotonic=started_monotonic, last_stage="gate", outcome="skipped", reason_code="sealed_exists")
             persisted = persist_terminal_bundle(ctx, manifest, started_monotonic=started_monotonic, include_alert=True)
             return (0 if persisted else 1), manifest
-        previous_reason, previous_run_id, scan_diagnostics = scan_previous_runs(
-            runtime_dir,
-            target_date,
-            symbol=args.symbol,
-            mode=mode,
-            write_official=args.write_official,
-        )
-        manifest["previous_run_id"] = previous_run_id
-        manifest["scan_diagnostics"] = scan_diagnostics
-        if previous_reason == "already_completed":
-            finish_manifest(manifest, started_monotonic=started_monotonic, last_stage="gate", outcome="skipped", reason_code="already_completed")
-            persisted = persist_terminal_bundle(ctx, manifest, started_monotonic=started_monotonic, include_alert=False)
-            return (0 if persisted else 1), manifest
         with runner_lock(ctx) as acquired:
             if not acquired:
                 finish_manifest(manifest, started_monotonic=started_monotonic, last_stage="gate", outcome="skipped", reason_code="runner_already_active")
                 persisted = persist_terminal_bundle(ctx, manifest, started_monotonic=started_monotonic, include_alert=True)
+                return (0 if persisted else 1), manifest
+            previous_reason, previous_run_id, scan_diagnostics = scan_previous_runs(
+                runtime_dir,
+                target_date,
+                symbol=args.symbol,
+                mode=mode,
+                write_official=args.write_official,
+                repo_root=REPO_ROOT,
+                official_path=official_path,
+            )
+            manifest["previous_run_id"] = previous_run_id
+            manifest["scan_diagnostics"] = scan_diagnostics
+            if previous_reason == "already_completed":
+                finish_manifest(
+                    manifest,
+                    started_monotonic=started_monotonic,
+                    last_stage="gate",
+                    outcome="skipped",
+                    reason_code="already_completed",
+                )
+                persisted = persist_terminal_bundle(
+                    ctx,
+                    manifest,
+                    started_monotonic=started_monotonic,
+                    include_alert=False,
+                )
                 return (0 if persisted else 1), manifest
             command = generator_command(args, target_date, ctx.candidate_path)
             manifest["generator"]["command"] = command
@@ -1078,6 +1165,7 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
                             manifest["official_changed"] = write_result.official_changed
                             manifest["official_bytes_equal_candidate"] = write_result.official_bytes_equal_candidate
                             manifest["official_post_write_error"] = write_result.post_write_error
+                            manifest["comparison"] = write_result.comparison
                             last_stage = (
                                 "validate"
                                 if write_result.reason_code in {"official_written_postcheck_failed", "official_written_bytes_mismatch"}
@@ -1106,6 +1194,7 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
                         manifest["official_changed"] = write_result.official_changed
                         manifest["official_bytes_equal_candidate"] = write_result.official_bytes_equal_candidate
                         manifest["official_post_write_error"] = write_result.post_write_error
+                        manifest["comparison"] = write_result.comparison
                         last_stage = (
                             "validate"
                             if write_result.reason_code in {"official_written_postcheck_failed", "official_written_bytes_mismatch"}

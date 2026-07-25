@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import math
 import os
@@ -13,6 +15,7 @@ from typing import Any, Callable
 
 from tools import official_facts_lock as ofl
 from tools import validate_review_chain as vrc
+from tools import volume_ratio_evidence as vre
 
 
 OFFICIAL_DAILY_DIR = Path("data") / "daily"
@@ -36,6 +39,15 @@ CORE_QUOTE_FIELDS = (
 )
 VOLUME_RATIO_ALLOWED_STATUSES = {"confirmed", "derived_confirmed"}
 VOLUME_RATIO_BLOCKED_STATUSES = {"candidate", "conflict", "stale", "unavailable", "rejected", "needs_manual_check"}
+SEMANTIC_NOOP_EXCLUDED_JSON_PATHS = (
+    "generated_at",
+    "quote_verification.fetched_at",
+    "run.fetched_at",
+    "volume_ratio.five_day_volume_check.fetched_at",
+    "volume_ratio.snapshot_ohlc_check.fetched_at",
+    "volume_ratio.verification.fetched_at",
+)
+SEMANTIC_COMPARISON_MODE = "approved_timestamp_paths_v1"
 
 
 @dataclass(frozen=True)
@@ -62,6 +74,119 @@ class OfficialWriteResult:
     official_changed: bool = False
     official_bytes_equal_candidate: bool | None = None
     post_write_error: dict[str, Any] | None = None
+    comparison: dict[str, Any] | None = None
+
+
+def semantic_json_bytes(payload: dict[str, Any]) -> bytes:
+    """Serialize normalized facts deterministically for semantic hashing."""
+
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def _pop_exact_json_path(payload: dict[str, Any], path: str) -> tuple[bool, object]:
+    parts = path.split(".")
+    current: object = payload
+    for part in parts[:-1]:
+        if not isinstance(current, dict) or part not in current:
+            return False, None
+        current = current[part]
+    if not isinstance(current, dict) or parts[-1] not in current:
+        return False, None
+    return True, current.pop(parts[-1])
+
+
+def build_semantic_comparison(
+    *,
+    candidate: dict[str, Any],
+    official: dict[str, Any],
+    candidate_bytes: bytes,
+    official_bytes: bytes,
+    symbol: str,
+    target_date: str,
+) -> dict[str, Any]:
+    """Compare facts while excluding only the six approved timestamp paths."""
+
+    candidate_raw_sha = hashlib.sha256(candidate_bytes).hexdigest()
+    official_raw_sha = hashlib.sha256(official_bytes).hexdigest()
+    result: dict[str, Any] = {
+        "comparison_mode": SEMANTIC_COMPARISON_MODE,
+        "candidate_raw_sha256": candidate_raw_sha,
+        "official_raw_sha256": official_raw_sha,
+        "candidate_semantic_sha256": None,
+        "official_semantic_sha256": None,
+        "excluded_json_paths": list(SEMANTIC_NOOP_EXCLUDED_JSON_PATHS),
+        "excluded_values": {
+            "candidate_types": {},
+            "official_types": {},
+            "all_paths_present": False,
+            "all_strings": False,
+            "all_valid_iso_datetime": False,
+        },
+        "semantic_equal": False,
+        "official_changed": False,
+    }
+    candidate_schema = candidate.get("schema_version")
+    identity_equal = (
+        candidate.get("symbol") == official.get("symbol") == symbol
+        and candidate.get("trade_date") == official.get("trade_date") == target_date
+        and isinstance(candidate_schema, str)
+        and candidate_schema == official.get("schema_version")
+    )
+    if not identity_equal:
+        return result
+
+    candidate_semantic = copy.deepcopy(candidate)
+    official_semantic = copy.deepcopy(official)
+    all_present = True
+    all_strings = True
+    all_valid_iso = True
+    for path in SEMANTIC_NOOP_EXCLUDED_JSON_PATHS:
+        candidate_present, candidate_value = _pop_exact_json_path(candidate_semantic, path)
+        official_present, official_value = _pop_exact_json_path(official_semantic, path)
+        all_present = all_present and candidate_present and official_present
+        candidate_type = type(candidate_value).__name__ if candidate_present else "missing"
+        official_type = type(official_value).__name__ if official_present else "missing"
+        result["excluded_values"]["candidate_types"][path] = candidate_type
+        result["excluded_values"]["official_types"][path] = official_type
+        values_are_strings = (
+            candidate_present
+            and official_present
+            and isinstance(candidate_value, str)
+            and isinstance(official_value, str)
+        )
+        all_strings = all_strings and values_are_strings
+        if values_are_strings:
+            try:
+                vre.parse_timezone_datetime(candidate_value, field=f"candidate.{path}")
+                vre.parse_timezone_datetime(official_value, field=f"official.{path}")
+            except vre.EvidenceError:
+                all_valid_iso = False
+        else:
+            all_valid_iso = False
+    result["excluded_values"]["all_paths_present"] = all_present
+    result["excluded_values"]["all_strings"] = all_strings
+    result["excluded_values"]["all_valid_iso_datetime"] = all_valid_iso
+    if not (all_present and all_strings and all_valid_iso):
+        return result
+
+    try:
+        candidate_semantic_sha = hashlib.sha256(semantic_json_bytes(candidate_semantic)).hexdigest()
+        official_semantic_sha = hashlib.sha256(semantic_json_bytes(official_semantic)).hexdigest()
+    except (TypeError, ValueError):
+        return result
+    result["candidate_semantic_sha256"] = candidate_semantic_sha
+    result["official_semantic_sha256"] = official_semantic_sha
+    result["semantic_equal"] = (
+        candidate_semantic == official_semantic
+        and candidate_semantic_sha == official_semantic_sha
+    )
+    return result
 
 
 def canonical_official_path(repo_root: Path, symbol: str, target_date: str) -> Path:
@@ -397,8 +522,45 @@ def promote_candidate_to_official(
                 {**partial_policy.__dict__},
                 validator_before,
                 validator_before,
+                False,
+                True,
             )
         if official_bytes is not None:
+            official_validator = _validator_summary(
+                existing,
+                official_path=official_path,
+                target_date=target_date,
+                validator=validator,
+            )
+            comparison = build_semantic_comparison(
+                candidate=candidate,
+                official=existing,
+                candidate_bytes=candidate_bytes,
+                official_bytes=official_bytes,
+                symbol=symbol,
+                target_date=target_date,
+            )
+            if (
+                official_validator.get("status") == "passed"
+                and comparison.get("semantic_equal") is True
+            ):
+                return OfficialWriteResult(
+                    "semantic_noop",
+                    "official_unchanged",
+                    "official_semantically_identical",
+                    official_path,
+                    exists_before,
+                    before_sha,
+                    before_sha,
+                    candidate_sha,
+                    {**partial_policy.__dict__},
+                    validator_before,
+                    official_validator,
+                    False,
+                    False,
+                    None,
+                    comparison,
+                )
             return OfficialWriteResult(
                 "conflict_blocked",
                 "needs_manual_review",
@@ -410,7 +572,8 @@ def promote_candidate_to_official(
                 candidate_sha,
                 {**partial_policy.__dict__},
                 validator_before,
-                {"status": "not_run"},
+                official_validator,
+                comparison=comparison,
             )
         final_bytes, after_sha, post_write_error = _write_bytes_locked(
             official_path,

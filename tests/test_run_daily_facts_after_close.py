@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import subprocess
@@ -5,10 +6,13 @@ import sys
 import threading
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
+from tools import review_manifest as phase_c
 from tools import run_daily_facts_after_close as runner
 
 
@@ -146,6 +150,32 @@ def eligible_official_candidate(*, status: str = "success", source_date: str = "
         "news_policy_context": None,
     }
     return candidate
+
+
+def semantic_timestamp_pair(*, status: str = "success") -> tuple[dict, dict]:
+    official = eligible_official_candidate(status=status)
+    official["generated_at"] = "2026-07-16T08:00:00Z"
+    official["quote_verification"]["fetched_at"] = "2026-07-16T08:00:01Z"
+    official["run"]["fetched_at"] = "2026-07-16T08:00:02Z"
+    official["volume_ratio"]["five_day_volume_check"] = {"fetched_at": "2026-07-16T08:00:03Z"}
+    official["volume_ratio"]["snapshot_ohlc_check"] = {"fetched_at": "2026-07-16T08:00:04Z"}
+    official["volume_ratio"]["verification"]["fetched_at"] = "2026-07-16T08:00:05Z"
+    candidate = copy.deepcopy(official)
+    candidate["generated_at"] = "2026-07-16T09:00:00Z"
+    candidate["quote_verification"]["fetched_at"] = "2026-07-16T09:00:01Z"
+    candidate["run"]["fetched_at"] = "2026-07-16T09:00:02Z"
+    candidate["volume_ratio"]["five_day_volume_check"]["fetched_at"] = "2026-07-16T09:00:03Z"
+    candidate["volume_ratio"]["snapshot_ohlc_check"]["fetched_at"] = "2026-07-16T09:00:04Z"
+    candidate["volume_ratio"]["verification"]["fetched_at"] = "2026-07-16T09:00:05Z"
+    return official, candidate
+
+
+def set_json_path(payload: dict, path: str, value) -> None:
+    current = payload
+    parts = path.split(".")
+    for part in parts[:-1]:
+        current = current[part]
+    current[parts[-1]] = value
 
 
 def marker_for(candidate: dict) -> str:
@@ -780,14 +810,16 @@ def test_runtime_symlink_resolving_into_repository_is_rejected(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("overrides", "expected_previous"),
+    ("overrides", "expected_previous", "expected_diagnostic"),
     [
-        ({"symbol": "600000"}, None),
-        ({"mode": "historical_backfill"}, None),
-        ({"target_date": "2026-07-14"}, None),
+        ({"symbol": "600000"}, None, True),
+        ({"mode": "historical_backfill"}, None, True),
+        ({"target_date": "2026-07-14"}, None, False),
     ],
 )
-def test_previous_runs_do_not_cross_task_identity(tmp_path, overrides, expected_previous):
+def test_previous_runs_do_not_cross_task_identity(
+    tmp_path, overrides, expected_previous, expected_diagnostic
+):
     runtime = tmp_path / "runtime"
     manifest_date = overrides.get("target_date", "2026-07-16")
     path = runtime / "runs" / manifest_date / "other" / "manifest.json"
@@ -802,7 +834,11 @@ def test_previous_runs_do_not_cross_task_identity(tmp_path, overrides, expected_
 
     assert reason is None
     assert previous is expected_previous
-    assert diagnostics == []
+    assert bool(diagnostics) is expected_diagnostic
+    if expected_diagnostic:
+        assert diagnostics == [
+            {"path": str(path), "reason": "completion invalid: completion_identity_mismatch"}
+        ]
 
 
 def test_previous_runs_choose_latest_matching_and_skip_corrupt(tmp_path):
@@ -830,8 +866,13 @@ def test_previous_runs_choose_latest_matching_and_skip_corrupt(tmp_path):
 
     assert reason is None
     assert previous == "new"
-    assert len(diagnostics) == 1
+    assert len(diagnostics) == 4
     assert diagnostics[0]["path"] == str(corrupt)
+    assert diagnostics[0]["reason"] == "invalid manifest skipped: JSONDecodeError"
+    assert all(
+        item["reason"] == "completion invalid: completion_schema_invalid"
+        for item in diagnostics[1:]
+    )
 
 
 def test_corrupt_previous_manifest_diagnostic_is_persisted(tmp_path, monkeypatch):
@@ -901,7 +942,7 @@ def test_write_official_success_candidate_creates_canonical_official(tmp_path, m
     calendar = write_calendar(tmp_path / "calendar.json")
     repo = install_temp_repo_root(monkeypatch, tmp_path)
     candidate = eligible_official_candidate()
-    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
 
     code, manifest = runner.execute(
         parse_write_args(
@@ -927,6 +968,22 @@ def test_write_official_success_candidate_creates_canonical_official(tmp_path, m
     assert official.exists()
     assert saved["official_sha256_after"] == runner.sha256_bytes(official.read_bytes())
     assert Path(saved["candidate_path"]).read_bytes() == official.read_bytes()
+
+    rerun_code, rerun_manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+    assert rerun_code == 0
+    assert load_manifest(rerun_manifest)["reason_code"] == "already_completed"
+    assert len(calls) == 1
 
 
 def test_write_official_partial_whitelist_creates_partial_not_success(tmp_path, monkeypatch):
@@ -1032,8 +1089,9 @@ def test_write_official_existing_identical_is_noop_and_completed(tmp_path, monke
     candidate = eligible_official_candidate()
     official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
     official.write_bytes(runner._json_payload(candidate))
-    before_sha = runner.sha256_bytes(official.read_bytes())
-    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    before = official.read_bytes()
+    before_sha = runner.sha256_bytes(before)
+    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
 
     code, manifest = runner.execute(
         parse_write_args(
@@ -1052,8 +1110,604 @@ def test_write_official_existing_identical_is_noop_and_completed(tmp_path, monke
     assert code == 0
     assert saved["write_action"] == "identical_noop"
     assert saved["reason_code"] == "official_already_identical"
+    assert saved["official_changed"] is False
+    assert saved["official_bytes_equal_candidate"] is True
     assert saved["official_sha256_before"] == before_sha
     assert saved["official_sha256_after"] == before_sha
+    assert saved["comparison"] is None
+    assert official.read_bytes() == before
+    assert runner.sha256_bytes(official.read_bytes()) == before_sha
+
+    rerun_code, rerun_manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+    assert rerun_code == 0
+    assert load_manifest(rerun_manifest)["reason_code"] == "already_completed"
+    assert len(calls) == 1
+
+
+def test_write_official_only_approved_timestamps_differ_is_semantic_noop(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = semantic_timestamp_pair()
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    before_sha = runner.sha256_bytes(before)
+    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-16",
+        "--reason",
+        "controlled replay",
+    )
+    code, manifest = runner.execute(args)
+
+    saved = load_manifest(manifest)
+    comparison = saved["comparison"]
+    assert code == 0
+    assert saved["write_action"] == "semantic_noop"
+    assert saved["outcome"] == "official_unchanged"
+    assert saved["reason_code"] == "official_semantically_identical"
+    assert saved["official_changed"] is False
+    assert saved["official_bytes_equal_candidate"] is False
+    assert official.read_bytes() == before
+    assert comparison["comparison_mode"] == runner.oft.SEMANTIC_COMPARISON_MODE
+    assert comparison["excluded_json_paths"] == list(runner.oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
+    assert comparison["candidate_raw_sha256"] != comparison["official_raw_sha256"]
+    assert comparison["candidate_semantic_sha256"] == comparison["official_semantic_sha256"]
+    assert comparison["excluded_values"]["all_paths_present"] is True
+    assert comparison["excluded_values"]["all_strings"] is True
+    assert comparison["excluded_values"]["all_valid_iso_datetime"] is True
+    assert comparison["semantic_equal"] is True
+    assert runner.sha256_bytes(official.read_bytes()) == before_sha
+    assert len(calls) == 1
+
+    rerun_code, rerun_manifest = runner.execute(args)
+    rerun_saved = load_manifest(rerun_manifest)
+    assert rerun_code == 0
+    assert rerun_saved["outcome"] == "skipped"
+    assert rerun_saved["reason_code"] == "already_completed"
+    assert rerun_saved["previous_run_id"] == saved["run_id"]
+    assert len(calls) == 1
+    assert official.read_bytes() == before
+    assert runner.sha256_bytes(official.read_bytes()) == before_sha
+
+
+def _mutate_semantic_completion(case, saved, official):
+    manifest_path = Path(saved["manifest_path"])
+    candidate_path = Path(saved["candidate_path"])
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if case == "outcome_failed":
+        payload["outcome"] = "failed"
+    elif case == "bundle_failed":
+        payload["manifest_bundle_failed"] = True
+    elif case == "manifest_write_failed":
+        payload["outcome"] = "failed"
+        payload["reason_code"] = "manifest_write_failed"
+        payload["manifest_bundle_failed"] = True
+    elif case == "forged_reason":
+        payload["reason_code"] = "forged_reason"
+    elif case == "comparison_missing":
+        payload["comparison"] = None
+    elif case == "candidate_path_missing":
+        payload["candidate_path"] = None
+    elif case == "candidate_path_escape":
+        payload["candidate_path"] = str(candidate_path.parent.parent / "candidate.json")
+    elif case == "candidate_deleted":
+        candidate_path.unlink()
+    elif case == "candidate_symlink":
+        outside = candidate_path.parent.parent.parent / "outside-candidate.json"
+        outside.write_bytes(candidate_path.read_bytes())
+        candidate_path.unlink()
+        candidate_path.symlink_to(outside)
+    elif case == "candidate_tampered":
+        candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+        candidate["quote"]["close"] += 1
+        candidate_path.write_text(json.dumps(candidate, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    elif case == "official_changed_true":
+        payload["official_changed"] = True
+    elif case == "before_after_differ":
+        payload["official_sha256_before"] = "0" * 64
+    elif case == "after_sha_wrong":
+        payload["official_sha256_before"] = "0" * 64
+        payload["official_sha256_after"] = "0" * 64
+        payload["comparison"]["official_raw_sha256"] = "0" * 64
+    elif case == "raw_sha_same":
+        candidate_path.write_bytes(official.read_bytes())
+        candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+        official_payload = json.loads(official.read_text(encoding="utf-8"))
+        candidate_sha = runner.sha256_bytes(candidate_path.read_bytes())
+        payload["candidate_sha256"] = candidate_sha
+        payload["comparison"] = runner.oft.build_semantic_comparison(
+            candidate=candidate,
+            official=official_payload,
+            candidate_bytes=candidate_path.read_bytes(),
+            official_bytes=official.read_bytes(),
+            symbol="300274",
+            target_date="2026-07-16",
+        )
+    elif case == "semantic_sha_differ":
+        payload["comparison"]["candidate_semantic_sha256"] = "0" * 64
+    elif case == "excluded_paths_missing":
+        payload["comparison"]["excluded_json_paths"] = payload["comparison"]["excluded_json_paths"][:-1]
+    elif case == "excluded_paths_extra":
+        payload["comparison"]["excluded_json_paths"].append("quote.close")
+    elif case == "excluded_paths_order":
+        payload["comparison"]["excluded_json_paths"] = list(
+            reversed(payload["comparison"]["excluded_json_paths"])
+        )
+    elif case == "excluded_paths_content":
+        payload["comparison"]["excluded_json_paths"][0] = "quote.close"
+    elif case == "stage_running":
+        payload["stage"] = "running"
+    elif case == "write_official_false":
+        payload["write_official"] = False
+    elif case == "dry_run_true":
+        payload["dry_run"] = True
+    elif case == "identity_symbol":
+        payload["symbol"] = "600000"
+    elif case == "identity_date":
+        payload["target_date"] = "2026-07-15"
+    elif case == "identity_mode":
+        payload["mode"] = "today_after_close"
+    elif case == "identity_run_id":
+        payload["run_id"] = str(uuid.uuid4())
+    else:
+        raise AssertionError(f"unknown completion corruption: {case}")
+    manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "outcome_failed",
+        "bundle_failed",
+        "manifest_write_failed",
+        "forged_reason",
+        "comparison_missing",
+        "candidate_path_missing",
+        "candidate_path_escape",
+        "candidate_deleted",
+        "candidate_symlink",
+        "candidate_tampered",
+        "official_changed_true",
+        "before_after_differ",
+        "after_sha_wrong",
+        "raw_sha_same",
+        "semantic_sha_differ",
+        "excluded_paths_missing",
+        "excluded_paths_extra",
+        "excluded_paths_order",
+        "excluded_paths_content",
+        "stage_running",
+        "write_official_false",
+        "dry_run_true",
+        "identity_symbol",
+        "identity_date",
+        "identity_mode",
+        "identity_run_id",
+    ],
+)
+def test_invalid_semantic_completion_is_diagnosed_and_generator_reruns(tmp_path, monkeypatch, case):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = semantic_timestamp_pair()
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    protected_official = official.read_bytes()
+    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-16",
+        "--reason",
+        "completion corruption regression",
+    )
+    first_code, first_manifest = runner.execute(args)
+    first = load_manifest(first_manifest)
+    assert first_code == 0
+    assert first["write_action"] == "semantic_noop"
+
+    _mutate_semantic_completion(case, first, official)
+    rerun_code, rerun_manifest = runner.execute(args)
+    rerun = load_manifest(rerun_manifest)
+
+    assert rerun_code == 0
+    assert rerun["reason_code"] != "already_completed"
+    assert len(calls) == 2
+    assert any(
+        item["path"] == first["manifest_path"] and item["reason"].startswith("completion invalid:")
+        for item in rerun["scan_diagnostics"]
+    )
+    assert official.read_bytes() == protected_official
+
+
+def test_semantic_noop_bundle_failure_rerun_converges(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = semantic_timestamp_pair()
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    protected_official = official.read_bytes()
+    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
+    original_build_context = runner.build_context
+    build_count = 0
+
+    def collide_first_summary(args, runtime_dir, target_date, mode):
+        nonlocal build_count
+        ctx = original_build_context(args, runtime_dir, target_date, mode)
+        build_count += 1
+        if build_count == 1:
+            ctx.summary_path.mkdir(parents=True)
+        return ctx
+
+    monkeypatch.setattr(runner, "build_context", collide_first_summary)
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-16",
+        "--reason",
+        "bundle failure convergence",
+    )
+
+    first_code, first_manifest = runner.execute(args)
+    first = load_manifest(first_manifest)
+    assert first_code == 1
+    assert first["write_action"] == "semantic_noop"
+    assert first["outcome"] == "failed"
+    assert first["reason_code"] == "manifest_write_failed"
+    assert first["manifest_bundle_failed"] is True
+
+    failed_review = phase_c.generate_review(
+        phase_c.ReviewOptions(
+            runtime_dir=tmp_path / "phase-c-failed-bundle",
+            runner_runtime_dir=tmp_path / "runtime",
+            symbol="300274",
+            trade_date="2026-07-16",
+            runner_manifest_path=Path(first["manifest_path"]),
+            repo_root=repo,
+            official_lock_dir=tmp_path / "phase-c-failed-locks",
+            now=lambda: datetime(2026, 7, 16, 16, 31, tzinfo=ZoneInfo("Asia/Shanghai")),
+        )
+    )
+    failed_review_payload = json.loads(failed_review.manifest_path.read_text(encoding="utf-8"))
+    assert failed_review_payload["artifact_type"] == "incident_review"
+    assert failed_review_payload["review_state"] == "needs_manual_review"
+
+    rerun_code, rerun_manifest = runner.execute(args)
+    rerun = load_manifest(rerun_manifest)
+    assert rerun_code == 0
+    assert rerun["write_action"] == "semantic_noop"
+    assert rerun["reason_code"] == "official_semantically_identical"
+    assert any(
+        item["path"] == first["manifest_path"] and item["reason"] == "completion invalid: completion_outcome_failed"
+        for item in rerun["scan_diagnostics"]
+    )
+    assert len(calls) == 2
+    assert official.read_bytes() == protected_official
+
+
+def test_completion_scan_runs_while_runner_lock_is_held(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    patch_validator(monkeypatch)
+    patch_generator(monkeypatch)
+    original_scan = runner.scan_previous_runs
+    observed = []
+
+    def assert_locked(runtime_dir, target_date, **kwargs):
+        probe_args = parse_args(tmp_path, calendar, "--now", "2026-07-16T15:25:00+08:00")
+        probe = runner.build_context(probe_args, runtime_dir, target_date, kwargs["mode"])
+        with runner.runner_lock(probe) as acquired:
+            observed.append(acquired)
+        return original_scan(runtime_dir, target_date, **kwargs)
+
+    monkeypatch.setattr(runner, "scan_previous_runs", assert_locked)
+    code, manifest = runner.execute(parse_args(tmp_path, calendar, "--now", "2026-07-16T15:25:00+08:00"))
+
+    assert code == 0
+    assert load_manifest(manifest)["outcome"] == "success"
+    assert observed == [False]
+
+
+def test_phase_b_semantic_noop_manifest_is_accepted_by_phase_c_with_real_validator(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = semantic_timestamp_pair()
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    before_sha = runner.sha256_bytes(before)
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "cross-stage semantic noop integration",
+        )
+    )
+    saved = load_manifest(manifest)
+    assert code == 0, {
+        key: saved.get(key)
+        for key in ("outcome", "reason_code", "write_action", "validator", "official_validator_before", "exception")
+    }
+    assert saved["write_action"] == "semantic_noop"
+    assert phase_c.oft.build_semantic_comparison is runner.oft.build_semantic_comparison
+
+    result = phase_c.generate_review(
+        phase_c.ReviewOptions(
+            runtime_dir=tmp_path / "phase-c-runtime",
+            runner_runtime_dir=tmp_path / "runtime",
+            symbol="300274",
+            trade_date="2026-07-16",
+            runner_manifest_path=Path(saved["manifest_path"]),
+            repo_root=repo,
+            official_lock_dir=tmp_path / "phase-c-locks",
+            now=lambda: datetime(2026, 7, 16, 16, 30, tzinfo=ZoneInfo("Asia/Shanghai")),
+        )
+    )
+    review = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert result.status == "review_created"
+    assert review["artifact_type"] == "facts_review"
+    assert review["write_action"] == "semantic_noop"
+    assert review["evidence_summary"]["semantic_comparison"] == saved["comparison"]
+    assert official.read_bytes() == before
+    assert runner.sha256_bytes(official.read_bytes()) == before_sha
+
+
+def test_write_official_schema_version_difference_is_not_semantic_noop(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = semantic_timestamp_pair()
+    official_payload["schema_version"] = "facts_pack_v0.1"
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "schema mismatch replay",
+        )
+    )
+    saved = load_manifest(manifest)
+    assert code == 2
+    assert saved["write_action"] == "conflict_blocked"
+    assert saved["comparison"]["semantic_equal"] is False
+    assert official.read_bytes() == before
+
+
+@pytest.mark.parametrize("side", ["candidate", "official"])
+@pytest.mark.parametrize("path", runner.oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
+def test_write_official_any_approved_timestamp_without_timezone_is_rejected(
+    tmp_path,
+    monkeypatch,
+    side,
+    path,
+):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = semantic_timestamp_pair()
+    target = candidate if side == "candidate" else official_payload
+    set_json_path(target, path, "2026-07-16T09:00:00")
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "timezone rejection replay",
+        )
+    )
+    saved = load_manifest(manifest)
+    assert code == 2
+    assert saved["write_action"] == "conflict_blocked"
+    assert saved["comparison"]["excluded_values"]["all_valid_iso_datetime"] is False
+    assert official.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "missing.market_indices",
+        "needs_manual_check.market_indices",
+        "volume_ratio.candidate_value",
+    ],
+)
+def test_write_official_deleted_business_field_is_conflict(tmp_path, monkeypatch, path):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = semantic_timestamp_pair()
+    parent, key = path.rsplit(".", 1)
+    current = candidate
+    for part in parent.split("."):
+        current = current[part]
+    del current[key]
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "business field deletion replay",
+        )
+    )
+    saved = load_manifest(manifest)
+    assert code == 2
+    assert saved["write_action"] == "conflict_blocked"
+    assert saved["comparison"]["candidate_semantic_sha256"] != saved["comparison"]["official_semantic_sha256"]
+    assert saved["comparison"]["semantic_equal"] is False
+    assert official.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        ("quote.high", 999.0),
+        ("quote.amount", 999999.0),
+        ("quote.turnover_rate", 9.9),
+        ("volume_ratio.confirmed_value", 9.9),
+        ("missing.market_indices", "changed"),
+        ("needs_manual_check.market_indices", True),
+    ],
+)
+def test_write_official_business_change_remains_conflict(tmp_path, monkeypatch, path, value):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = semantic_timestamp_pair()
+    set_json_path(candidate, path, value)
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+
+    saved = load_manifest(manifest)
+    assert code == 2
+    assert saved["write_action"] == "conflict_blocked"
+    assert saved["reason_code"] == "official_conflict"
+    assert saved["comparison"]["candidate_semantic_sha256"] != saved["comparison"]["official_semantic_sha256"]
+    assert saved["comparison"]["semantic_equal"] is False
+    assert official.read_bytes() == before
+
+
+def test_write_official_unknown_field_remains_conflict(tmp_path, monkeypatch):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = semantic_timestamp_pair()
+    candidate["unknown_business_field"] = "must-not-be-ignored"
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+    assert code == 2
+    assert load_manifest(manifest)["write_action"] == "conflict_blocked"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_check"),
+    [
+        ("approved_path_missing", "all_paths_present"),
+        ("timestamp_wrong_type", "all_strings"),
+        ("timestamp_invalid", "all_valid_iso_datetime"),
+        ("non_whitelist_fetched_at", "semantic_equal"),
+    ],
+)
+def test_write_official_invalid_semantic_evidence_remains_conflict(
+    tmp_path,
+    monkeypatch,
+    mutation,
+    expected_check,
+):
+    calendar = write_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = semantic_timestamp_pair()
+    if mutation == "approved_path_missing":
+        del candidate["volume_ratio"]["snapshot_ohlc_check"]["fetched_at"]
+    elif mutation == "timestamp_wrong_type":
+        candidate["run"]["fetched_at"] = 123
+    elif mutation == "timestamp_invalid":
+        candidate["generated_at"] = "not-a-timestamp"
+    else:
+        official_payload["volume_ratio"]["extra_check"] = {"fetched_at": "2026-07-16T08:00:06Z"}
+        candidate["volume_ratio"]["extra_check"] = {"fetched_at": "2026-07-16T09:00:06Z"}
+    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    patch_generator(monkeypatch, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-16",
+            "--reason",
+            "controlled replay",
+        )
+    )
+    saved = load_manifest(manifest)
+    assert code == 2
+    assert saved["write_action"] == "conflict_blocked"
+    assert saved["comparison"]["excluded_json_paths"] == list(runner.oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
+    if expected_check == "semantic_equal":
+        assert saved["comparison"]["semantic_equal"] is False
+    else:
+        assert saved["comparison"]["excluded_values"][expected_check] is False
 
 
 def test_write_official_existing_different_conflict_blocks(tmp_path, monkeypatch):
