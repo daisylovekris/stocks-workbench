@@ -1,0 +1,2 @@
+c47978d2474087a8db2c1e4acdbe84128b47ded8364ae9381a5682d1d2df1368  review_bundle_manifest.json
+algorithm=sha256(exact review_bundle_manifest.json bytes); manifest seals every file listed in files

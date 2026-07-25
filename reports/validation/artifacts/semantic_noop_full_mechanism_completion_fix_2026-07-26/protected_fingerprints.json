@@ -1,0 +1,22 @@
+{
+  "verified_at": "2026-07-25T18:26:35Z",
+  "verification": "PASS_BEFORE_AND_AFTER_IMPLEMENTATION_AND_TESTS",
+  "official_facts": {
+    "path": "data/daily/300274_2026-07-23_facts.json",
+    "sha256": "c5cf1efae2bcaacd586117ce413e3f374a54912fda5d0c81a5a5f90fad3eab27"
+  },
+  "runner_manifest": {
+    "path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-23/22972611-db15-4b55-8eb6-a2f390ce5f80/manifest.json",
+    "sha256": "adf11ffabbde4d5c6afd90e8e0d11ecc924f7dcc680aca8e9c8b32e3d707bf3d"
+  },
+  "phase_c_review_manifest": {
+    "path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/reviews/2026-07-23/rev_300274_2026-07-23_c5cf1efae2bcaacd/review_manifest.json",
+    "sha256": "d4717c4805acdd4915a6ed2dbcb43af861008f7faa5bf102ebf5c4b46a337677"
+  },
+  "review_index": {
+    "path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/reviews/2026-07-23/review_index.jsonl",
+    "sha256": "e2d498694cc14344a91f3157c489e0dfd595e47fc7f15030b6d1d7ef89c916b2"
+  },
+  "excluded_2026_07_24_candidate": true,
+  "official_bytes_changed_by_completion_tests": false
+}

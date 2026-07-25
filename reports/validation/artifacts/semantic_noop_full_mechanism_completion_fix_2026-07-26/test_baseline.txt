@@ -1,0 +1,13 @@
+Expected baseline for base HEAD plus scoped_completion_fix.patch:
+
+Completion validator and bundle recovery: 28 passed
+Phase B semantic matrix selection: 4 passed
+Official transaction and lock selection: 19 passed, 9 subtests passed
+Phase B runner: 177 passed
+Phase C: 135 passed
+Phase B to Phase C integration selection: 2 passed
+Full authoritative pytest root (tests/): 573 passed, 28 subtests passed
+py_compile: PASS
+git diff --check: PASS
+
+All complete executions use PYTHONPATH=. and pytest -p no:cacheprovider.

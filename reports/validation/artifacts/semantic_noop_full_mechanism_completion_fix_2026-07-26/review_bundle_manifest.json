@@ -1,0 +1,173 @@
+{
+  "bundle_version": "semantic_noop_full_mechanism_completion_fix_2026-07-26-v1",
+  "generated_at": "2026-07-25T18:26:35Z",
+  "base_head": "877e20aa8b1601ed92ed934f8bcd8300c5039845",
+  "scoped_patch_sha256": "e22e252f9406b7018f6d6c12ca4f2e82d22ddac086d525fb926ea1c0ead0d12f",
+  "package_sha256_algorithm": "sha256 of the exact UTF-8 bytes of review_bundle_manifest.json; the manifest seals every file in files",
+  "clean_candidate_identity": "/private/tmp/semantic-noop-completion-fix-clean-git-20260726.yzm5Sa/stocks",
+  "candidate_git_status": "modified=7, untracked=2, staged=0",
+  "in_scope_paths": [
+    "rules/run_daily_facts_after_close_phase_b_v0.2.md",
+    "tests/test_generate_daily_facts.py",
+    "tests/test_run_daily_facts_after_close.py",
+    "tools/generate_daily_facts.py",
+    "tools/official_facts_transaction.py",
+    "tools/phase_b_completion.py",
+    "tools/review_manifest.py",
+    "tools/run_daily_facts_after_close.py",
+    "tools/safe_file_read.py"
+  ],
+  "dependency_snapshots": [
+    "config/a_share_trading_calendar_2026.json",
+    "rules/review_manifest_phase_c_v0.2.md",
+    "tests/test_review_manifest.py",
+    "tools/official_facts_lock.py",
+    "tools/validate_review_chain.py",
+    "tools/volume_ratio_evidence.py"
+  ],
+  "test_baseline": {
+    "completion_validator": "28 passed",
+    "phase_b_semantic_matrix": "4 passed",
+    "official_transaction_lock": "19 passed, 9 subtests passed",
+    "phase_b_runner": "177 passed",
+    "phase_c": "135 passed",
+    "phase_b_to_phase_c": "2 passed",
+    "full_pytest": "573 passed, 28 subtests passed",
+    "clean_candidate_full_pytest": "573 passed, 28 subtests passed",
+    "py_compile": "PASS",
+    "git_diff_check": "PASS"
+  },
+  "protected_fingerprints_status": "PASS_BEFORE_AND_AFTER_IMPLEMENTATION_AND_TESTS",
+  "credential_scan": "PASS",
+  "old_bundle_status": "superseded",
+  "old_package_sha256": "0980515c7450eb4fbb2b357e3894f38d911dbdc714571c4d5b030be4e8c557a4",
+  "prior_findings": {
+    "gpt55_high_p2": "closed_by_completion_validator_and_locked_rescan",
+    "kimi_k3_p2_1": "closed_by_failed_bundle_rejection_and_rerun_convergence",
+    "kimi_k3_p3_1": "closed_by_live_committed_candidate_validation"
+  },
+  "explicitly_deferred": [
+    "K3 P3-2 standalone generate_daily_facts CLI transaction semantics",
+    "K3 P3-3 partial semantic_noop runner needs_manual_review consistency",
+    "directory-wide summary/manifest atomicity"
+  ],
+  "ready_for_gpt55_high_repair_final_review": true,
+  "files": [
+    {
+      "path": "bundle_file_sha256.txt",
+      "sha256": "90427cfc2cd0779a287ace2ba3828348fa9174eebbf9e93cf9b386382f2e4232"
+    },
+    {
+      "path": "clean_candidate_identity.txt",
+      "sha256": "177bb7cfaa3435a75e9c6efe47f393e1fda81eab6a822fc13ff79ac3829b3109"
+    },
+    {
+      "path": "common_review_prompt.txt",
+      "sha256": "3764b0dd23fba3d7da62c911589052107cb45349c2f9d531c17f31b8c256e097"
+    },
+    {
+      "path": "credential_scan.txt",
+      "sha256": "e391de0ceee1c84e47820c4353d8a5b43281fab507b4a9c809d9401c307930e9"
+    },
+    {
+      "path": "input_review_evidence.json",
+      "sha256": "a023f1036cd9cf6907a000f2e4bba5cbf2305ab53172686bf865007706c5cdb9"
+    },
+    {
+      "path": "old_findings_regression.md",
+      "sha256": "ee9c987360488770ef4dcf02bae2935981c57bb84b1b6d4c6a2da77c2677643b"
+    },
+    {
+      "path": "protected_fingerprints.json",
+      "sha256": "6a7e084eff4935d7cb3f9382a778332f7ad34b737ef41bd4765801914ce9901d"
+    },
+    {
+      "path": "reviews/gpt55_high_independent_review_raw_output.md",
+      "sha256": "4ad467c9b5e2acd118c67cc08f01f371eaaeaba30547965d0d9970c92d849701"
+    },
+    {
+      "path": "reviews/kimi_k3_review_provenance.json",
+      "sha256": "a3695acd474926516277cefc3077e7cbb784f8070e6a4654fcafed5e19b7a1cf"
+    },
+    {
+      "path": "reviews/kimi_k3_semantic_noop_full_mechanism_review_raw.md",
+      "sha256": "afee4601aa9f679acfae01fd5a835d837d8c05cefb7fae1f0fdbdfd7ffe3e79f"
+    },
+    {
+      "path": "scope_notes.md",
+      "sha256": "22aae312aa87d7a52ea7c5f045e78f7a929bc4799a59350c510b68c30eabdd39"
+    },
+    {
+      "path": "scoped_completion_fix.patch",
+      "sha256": "e22e252f9406b7018f6d6c12ca4f2e82d22ddac086d525fb926ea1c0ead0d12f"
+    },
+    {
+      "path": "snapshots/config/a_share_trading_calendar_2026.json",
+      "sha256": "fd693d1e62b46408e7fbff3049e06cd368e5026279398d0c5e5344e3472add5e"
+    },
+    {
+      "path": "snapshots/rules/review_manifest_phase_c_v0.2.md",
+      "sha256": "1d9ed3101594b12cea127f459b6e195d94098912fa6308508be74d1f441b0cc8"
+    },
+    {
+      "path": "snapshots/rules/run_daily_facts_after_close_phase_b_v0.2.md",
+      "sha256": "65ae9a711fb6e3785c9e58deb7d1eaa46908be0e64808425843c1110369c1813"
+    },
+    {
+      "path": "snapshots/tests/test_generate_daily_facts.py",
+      "sha256": "bf459bc78fd8e384d47e87cbb0897d84d331bd253ad4c8a0f3ff17a699206eb0"
+    },
+    {
+      "path": "snapshots/tests/test_review_manifest.py",
+      "sha256": "a6e66162b7c26462c98ff9e4a53c64e4efb3c59872ec473e8af30160a777c943"
+    },
+    {
+      "path": "snapshots/tests/test_run_daily_facts_after_close.py",
+      "sha256": "06a66bbd90776ad437fa94ea75f205ec110e8c84a70ffa4e1e62c488b4c9019b"
+    },
+    {
+      "path": "snapshots/tools/generate_daily_facts.py",
+      "sha256": "f9ca3b3131c66a0da7e2cffddf46addd8f90ac7855a333e1e4686441a8afe936"
+    },
+    {
+      "path": "snapshots/tools/official_facts_lock.py",
+      "sha256": "0e8109256684b8d52ce8e99a76cb4e73742ebad6ad179354b9ad095f1e5bad37"
+    },
+    {
+      "path": "snapshots/tools/official_facts_transaction.py",
+      "sha256": "ccf89703590f48916c4630f098ed610997cbe43f1e02daa8cbe61ea80f8b8397"
+    },
+    {
+      "path": "snapshots/tools/phase_b_completion.py",
+      "sha256": "6628f70ce7cef35eaf8b7884c6fba8c1f2b769ee5e133195973f67dafca4f292"
+    },
+    {
+      "path": "snapshots/tools/review_manifest.py",
+      "sha256": "fa7b6fb47588a9df2561fd6967d5a16db24f6c72e76b40c00cfd9f700ebcd8b7"
+    },
+    {
+      "path": "snapshots/tools/run_daily_facts_after_close.py",
+      "sha256": "ea383fd67eb0e05235fb1ec0592e09dd7540642bbdccd59ba06094892cb6bfbe"
+    },
+    {
+      "path": "snapshots/tools/safe_file_read.py",
+      "sha256": "464f6b3b0cb0e17e96deedf1152201c86cb9070535030824fdfa77b1906689da"
+    },
+    {
+      "path": "snapshots/tools/validate_review_chain.py",
+      "sha256": "79d3f6644dcdc9f24767bebe21ef0f32a3fa62f4f5f3d604aab708356741933d"
+    },
+    {
+      "path": "snapshots/tools/volume_ratio_evidence.py",
+      "sha256": "74ccac464bc3730fdac88d8e0764d23b8fd83ce651a8b41cb62406a689197c47"
+    },
+    {
+      "path": "test_baseline.txt",
+      "sha256": "535f26d7e155cd6a2e6be786694bd5aec679ebc60e09293ff767c04b874a83c4"
+    },
+    {
+      "path": "test_execution_result.txt",
+      "sha256": "8f00fcf4a2e9f2191c508f5f88669f05f7ec06d73f35b8a60188bb1f3f760710"
+    }
+  ]
+}

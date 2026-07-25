@@ -1,0 +1,20 @@
+{
+  "gpt55_high_raw": {
+    "path": "reviews/gpt55_high_independent_review_raw_output.md",
+    "sha256": "4ad467c9b5e2acd118c67cc08f01f371eaaeaba30547965d0d9970c92d849701",
+    "finding": "P2-1 previous-run completion accepted invalid semantic_noop records"
+  },
+  "kimi_k3_raw": {
+    "path": "reviews/kimi_k3_semantic_noop_full_mechanism_review_raw.md",
+    "sha256": "afee4601aa9f679acfae01fd5a835d837d8c05cefb7fae1f0fdbdfd7ffe3e79f",
+    "finding": "P2-1 bundle-failure deadlock and P3-1 missing or tampered candidate evidence"
+  },
+  "kimi_k3_provenance": {
+    "path": "reviews/kimi_k3_review_provenance.json",
+    "sha256": "a3695acd474926516277cefc3077e7cbb784f8070e6a4654fcafed5e19b7a1cf"
+  },
+  "superseded_bundle": {
+    "path": "../semantic_noop_full_mechanism_2026-07-25/",
+    "original_package_sha256": "0980515c7450eb4fbb2b357e3894f38d911dbdc714571c4d5b030be4e8c557a4"
+  }
+}

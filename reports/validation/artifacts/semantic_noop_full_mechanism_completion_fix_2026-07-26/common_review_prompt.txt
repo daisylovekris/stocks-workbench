@@ -1,0 +1,5 @@
+Review this frozen semantic_noop full-mechanism completion-fix bundle independently.
+
+Verify the Phase B completion validator, created/identical_noop/semantic_noop completion matrices, same-fd byte/SHA/JSON evidence, current official lock, committed candidate identity and live semantic recomputation, invalid-prior diagnostics and rerun, semantic bundle-failure convergence, runner-lock scan ordering, and the unchanged Phase B to Phase C incident/facts-review boundary.
+
+Use only files listed in review_bundle_manifest.json. Recompute every listed SHA before reviewing. Do not infer missing behavior from the parent worktree or prior reviewer conclusions. Report P1/P2/P3, scope limitations, test gaps, and whether the bundle is ready for a GPT-5.5/high repair final review.

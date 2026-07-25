@@ -1,0 +1,9 @@
+candidate_path=/private/tmp/semantic-noop-completion-fix-clean-git-20260726.yzm5Sa/stocks
+base_head=877e20aa8b1601ed92ed934f8bcd8300c5039845
+construction=local git clone of base HEAD plus explicit rsync of the nine in-scope files
+modified=7
+untracked=2
+staged=0
+full_pytest=573 passed, 28 subtests passed
+py_compile=PASS
+git_diff_check=PASS

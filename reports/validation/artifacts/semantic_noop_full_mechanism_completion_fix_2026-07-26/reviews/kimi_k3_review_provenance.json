@@ -1,0 +1,23 @@
+{
+  "schema_version": "independent_review_provenance_v1",
+  "source_path": "/tmp/kimi_k3_semantic_noop_full_mechanism_review_raw.md",
+  "archived_path": "reports/validation/artifacts/semantic_noop_full_mechanism_2026-07-25/kimi_k3_semantic_noop_full_mechanism_review_raw.md",
+  "sha256": "afee4601aa9f679acfae01fd5a835d837d8c05cefb7fae1f0fdbdfd7ffe3e79f",
+  "byte_count": 20818,
+  "model_display_name": "Kimi Code CLI agent",
+  "model_version": "UNKNOWN",
+  "thinking": "high",
+  "tool_calls": 22,
+  "review_start_time": "2026-07-25T17:14:06Z",
+  "review_end_time": "2026-07-25T17:35:34Z",
+  "output_truncated": "NO",
+  "metadata_basis": {
+    "model_display_name": "raw_report_MODEL_RECORD",
+    "model_version": "raw_report_MODEL_RECORD",
+    "thinking": "raw_report_MODEL_RECORD_and_REVIEW_RUNTIME",
+    "tool_calls": "user_supplied_review_execution_metadata",
+    "review_start_time": "raw_report_MODEL_RECORD",
+    "review_end_time": "raw_report_REVIEW_RUNTIME",
+    "output_truncated": "raw_report_REVIEW_RUNTIME"
+  }
+}

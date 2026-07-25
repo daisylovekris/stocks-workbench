@@ -1,0 +1,21 @@
+Main worktree targeted completion validator: 28 passed, 149 deselected
+Main worktree Phase B semantic matrix selection: 4 passed, 253 deselected
+Main worktree official transaction and lock selection: 19 passed, 67 deselected, 9 subtests passed
+Main worktree Phase B runner: 177 passed
+Main worktree Phase C: 135 passed
+Main worktree Phase B to Phase C integration selection: 2 passed, 310 deselected
+Main worktree full authoritative suite: 573 passed, 28 subtests passed in 13.53s
+
+Bare repository-root pytest collection: NOT AUTHORITATIVE; collection stopped on duplicate test module basenames under the preserved 2026-07-25 audit snapshots. No test executed in that probe.
+
+Archive-only clean tree probe: 567 passed, 28 subtests passed; 6 failures were exclusively git-status assertions because git archive intentionally has no .git metadata.
+
+Clean Git candidate: /private/tmp/semantic-noop-completion-fix-clean-git-20260726.yzm5Sa/stocks
+Clean Git candidate base HEAD: 877e20aa8b1601ed92ed934f8bcd8300c5039845
+Clean Git candidate status: 7 modified in-scope files, 2 untracked in-scope dependency files, staged=0
+Clean Git candidate full authoritative suite: 573 passed, 28 subtests passed in 14.07s
+Clean Git candidate py_compile: PASS
+Clean Git candidate git diff --check: PASS
+
+Main worktree py_compile: PASS
+Main worktree git diff --check: PASS

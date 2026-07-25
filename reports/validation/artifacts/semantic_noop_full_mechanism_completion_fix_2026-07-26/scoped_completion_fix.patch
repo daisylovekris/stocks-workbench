@@ -1,0 +1,1884 @@
+diff --git a/rules/run_daily_facts_after_close_phase_b_v0.2.md b/rules/run_daily_facts_after_close_phase_b_v0.2.md
+index 09a7916..1c79ecb 100644
+--- a/rules/run_daily_facts_after_close_phase_b_v0.2.md
++++ b/rules/run_daily_facts_after_close_phase_b_v0.2.md
+@@ -17,7 +17,7 @@ python3 tools/run_daily_facts_after_close.py --write-official ...
+ 
+ 正式写入链路为：
+ 
+-时间与交易日门 → runner 单实例锁 → generator dry-run 候选 → marker 解析 → 候选身份门 → facts Validator → partial 写入策略 → official facts 排他锁 → 锁内重读 official → 创建或安全跳过 → 原子写入 → 写后 Validator/SHA → runtime bundle 最终提交。
++时间与交易日门 → runner 单实例锁 → 锁内扫描并现场验证 previous-run completion → generator dry-run 候选 → marker 解析 → 候选身份门 → facts Validator → partial 写入策略 → official facts 排他锁 → 锁内重读 official → 创建或安全跳过 → 原子写入 → 写后 Validator/SHA → runtime bundle 最终提交。
+ 
+ runner 仍只以 `--dry-run --emit-runner-marker` 调用 generator 产出候选；runner 不让 generator 二次抓取。
+ 
+@@ -63,10 +63,22 @@ runtime 与 candidate 仍写入仓库外 runtime run 目录。
+ 
+ - official 不存在：候选满足全部准入门后允许创建。
+ - official 已存在且字节相同：不重写，`write_action=identical_noop`，`reason_code=official_already_identical`。
++- official 已存在且原始字节不同，但双方 facts Validator 均通过、身份字段一致、仅下列六个精确时间戳路径不同，删除这些路径后的确定性 JSON 完全相同：不重写，`write_action=semantic_noop`、`outcome=official_unchanged`、`reason_code=official_semantically_identical`、`official_changed=false`。
+ - official 已存在但内容不同：默认禁止覆盖，`write_action=conflict_blocked`，`reason_code=official_conflict`。
+ - sealed official：始终禁止自动覆盖，`write_action=sealed_blocked`，`reason_code=sealed_exists`。
+ - manual official：始终禁止自动覆盖，`write_action=manual_blocked`，`reason_code=manual_exists`。
+ 
++`semantic_noop` 的排除白名单固定且不可递归扩张：
++
++- `generated_at`
++- `quote_verification.fetched_at`
++- `run.fetched_at`
++- `volume_ratio.five_day_volume_check.fetched_at`
++- `volume_ratio.snapshot_ohlc_check.fetched_at`
++- `volume_ratio.verification.fetched_at`
++
++六个路径必须在双方均存在、值均为带时区的合法 ISO datetime 字符串。`symbol`、`trade_date`、`schema_version` 必须相同。删除六个路径后，结构和值必须完全相同；其他 `fetched_at`、未知字段、missing、needs_manual_check 或任何业务字段均不得忽略。任一条件不满足即 `conflict_blocked`。
++
+ Phase B 不实现自动择优覆盖、字段合并或旧产物迁移。
+ 
+ ## manifest 与故障边界
+@@ -83,6 +95,13 @@ Phase B manifest 记录：
+ - `partial_write_policy`
+ - `official_validator_before`
+ - `official_validator_after`
++- `comparison`
++- `manifest_bundle_failed`
++- `manifest_bundle_reason_code`
++
++`semantic_noop` 的 `comparison` 必须记录 raw SHA、semantic SHA、精确排除路径、双方排除值类型检查、ISO datetime 检查、`semantic_equal` 与 `official_changed=false`。semantic SHA 使用 UTF-8、`sort_keys=true`、固定 separators、无缩进换行的确定性 JSON 序列化；不得覆盖既有 raw SHA 字段。
++
++`generate_daily_facts.py` 的 `RunOutcome.wrote_file` 与 CLI 同名字段只表示本轮是否真实创建或替换 official bytes，必须与 transaction 的 `official_changed` 一致。`identical_noop` 与 `semantic_noop` 均为 `wrote_file=false`；完成/冲突语义不得借该布尔值表达，仍以 `write_action`、`outcome` 与 `reason_code` 为准。
+ 
+ runtime bundle 仍按 Phase A 顺序写入：
+ 
+@@ -94,7 +113,19 @@ manifest 是最终提交标记。若 official 已成功写入但最终 runtime b
+ 
+ dry-run success 永远不算正式完成。
+ 
+-只有 `write_official=true` 且 `write_action=created/identical_noop` 的合法正式 manifest 才算正式完成记录。partial official 记录为已落盘，但仍需要人工补全。
++只有成功、完整且现场证据仍成立的 `created`、`identical_noop` 或 `semantic_noop` 正式 manifest 才算完成记录。completion validator 属于 Phase B，并与 Phase C 共用 Phase B action/outcome/reason 矩阵；Phase B 不依赖 `tools/review_manifest.py`。
++
++通用完成门要求：`schema_version=runner_manifest_v0.2_phase_b`、`stage=finished`、带时区 `finished_at`、`outcome!=failed`、`manifest_bundle_failed` 未置真、`write_official=true`、`dry_run=false`，且 symbol、target_date、mode、run_id、manifest/candidate/official 规范路径身份一致。candidate 与当前 official 必须通过安全 no-follow fd 读取；字节、SHA 与 JSON 解析来自同一读取对象；双方必须现场通过 facts Validator；当前 official 在共享 official lock 内读取。
++
++分动作完成门：
++
++- `created`：仅接受 `official_written/success` 或 `official_written_partial/partial`，`official_changed=true`，before SHA 为空，after SHA 等于 candidate SHA，当前 official SHA 等于 after SHA，candidate 与 official 原始字节相同。
++- `identical_noop`：仅接受 `official_already_identical` 与候选 facts 状态一致的 outcome，`official_changed=false`、`official_bytes_equal_candidate=true`，before SHA、after SHA、candidate SHA 与当前 official SHA 全部相等。
++- `semantic_noop`：仅接受 `official_unchanged/official_semantically_identical`，`official_changed=false`、`official_bytes_equal_candidate=false`，before SHA 等于 after SHA 且不同于 candidate raw SHA；committed `candidate.json` 必须仍存在并匹配 candidate SHA；`comparison` 字段全集、六条排除路径及顺序必须精确一致，raw/semantic SHA 关系合法，`semantic_equal=true`；最后用共享 `build_semantic_comparison()` 对现场 candidate/official 字节重算并与 manifest 逐字段相等。
++
++previous-run scan 必须在 runner lock 内执行。非法或失效的 matching manifest 不计完成，按路径与稳定 reason code 写入 `scan_diagnostics`，然后允许 generator 与 official transaction 重新运行。candidate 丢失、符号链接替换、路径逃逸、内容篡改或 current official 漂移均按此处理。
++
++任何 `outcome=failed`、`manifest_bundle_failed=true` 或 `manifest_write_failed` 记录只保留为运行审计及 Phase C incident evidence，不扩展为正常 `facts_review`，也不得阻断安全重跑。partial official 或 `official_unchanged` 记录不代表人工批准，仍按 facts 未决项进入审查。
+ 
+ official 文件存在但 manifest 缺失时，不猜测完成状态；下一次正式运行必须读取并验证 official 后输出创建、相同 no-op 或冲突诊断。损坏 manifest 不阻断安全重跑；同一任务的最新合法正式记录才参与幂等。
+ 
+diff --git a/tests/test_generate_daily_facts.py b/tests/test_generate_daily_facts.py
+index ca6e56b..a429c42 100644
+--- a/tests/test_generate_daily_facts.py
++++ b/tests/test_generate_daily_facts.py
+@@ -1808,6 +1808,44 @@ class GenerateDailyFactsTests(unittest.TestCase):
+             self.assertTrue(official.exists())
+             self.assertEqual(outcome.output_sha256, gdf.ofl.sha256_file(official))
+ 
++    def test_write_official_wrote_file_tracks_actual_official_change(self):
++        volume_candidate = {
++            "candidate_value": 1.79,
++            "source": "pytest",
++            "source_date": "2026-07-10",
++            "fetched_at": "2026-07-13T00:00:00Z",
++            "method": "historical_five_day_volume_cross_check",
++            "verification_status": "confirmed",
++            "confirmed_by": "pytest",
++        }
++        cases = (
++            ("created", True, True),
++            ("created_postcheck_failed", True, True),
++            ("identical_noop", False, False),
++            ("semantic_noop", False, False),
++        )
++        for write_action, official_changed, expected_wrote_file in cases:
++            with self.subTest(write_action=write_action), tempfile.TemporaryDirectory() as tmpdir:
++                repo = Path(tmpdir) / "repo"
++                args = make_args(output=None, source="tencent", write_partial=True, write_official=True)
++                result = mock.Mock(
++                    write_action=write_action,
++                    official_changed=official_changed,
++                    official_sha256_after="a" * 64,
++                )
++                with (
++                    mock.patch.object(gdf, "REPO_ROOT", repo),
++                    mock.patch.object(gdf, "validate_generated_facts_pack", lambda *_args, **_kwargs: None),
++                    mock.patch.object(gdf.oft, "promote_candidate_to_official", return_value=result),
++                ):
++                    outcome = gdf.run(
++                        args,
++                        fetch_primary=make_fetcher(load_fixture("tencent_quote_0710.json")),
++                        fetch_fallback=make_error_fetcher("source_error", "unused"),
++                        volume_ratio_candidate_provider=lambda *_args: volume_candidate,
++                    )
++                self.assertIs(outcome.wrote_file, expected_wrote_file)
++
+     def test_write_official_rejects_noncanonical_symbol_and_date(self):
+         with tempfile.TemporaryDirectory() as tmpdir:
+             repo = Path(tmpdir) / "repo"
+diff --git a/tests/test_run_daily_facts_after_close.py b/tests/test_run_daily_facts_after_close.py
+index b441abf..e736f1d 100644
+--- a/tests/test_run_daily_facts_after_close.py
++++ b/tests/test_run_daily_facts_after_close.py
+@@ -1,3 +1,4 @@
++import copy
+ import json
+ import os
+ import subprocess
+@@ -5,10 +6,13 @@ import sys
+ import threading
+ import time
+ import uuid
++from datetime import datetime
+ from pathlib import Path
++from zoneinfo import ZoneInfo
+ 
+ import pytest
+ 
++from tools import review_manifest as phase_c
+ from tools import run_daily_facts_after_close as runner
+ 
+ 
+@@ -148,6 +152,32 @@ def eligible_official_candidate(*, status: str = "success", source_date: str = "
+     return candidate
+ 
+ 
++def semantic_timestamp_pair(*, status: str = "success") -> tuple[dict, dict]:
++    official = eligible_official_candidate(status=status)
++    official["generated_at"] = "2026-07-16T08:00:00Z"
++    official["quote_verification"]["fetched_at"] = "2026-07-16T08:00:01Z"
++    official["run"]["fetched_at"] = "2026-07-16T08:00:02Z"
++    official["volume_ratio"]["five_day_volume_check"] = {"fetched_at": "2026-07-16T08:00:03Z"}
++    official["volume_ratio"]["snapshot_ohlc_check"] = {"fetched_at": "2026-07-16T08:00:04Z"}
++    official["volume_ratio"]["verification"]["fetched_at"] = "2026-07-16T08:00:05Z"
++    candidate = copy.deepcopy(official)
++    candidate["generated_at"] = "2026-07-16T09:00:00Z"
++    candidate["quote_verification"]["fetched_at"] = "2026-07-16T09:00:01Z"
++    candidate["run"]["fetched_at"] = "2026-07-16T09:00:02Z"
++    candidate["volume_ratio"]["five_day_volume_check"]["fetched_at"] = "2026-07-16T09:00:03Z"
++    candidate["volume_ratio"]["snapshot_ohlc_check"]["fetched_at"] = "2026-07-16T09:00:04Z"
++    candidate["volume_ratio"]["verification"]["fetched_at"] = "2026-07-16T09:00:05Z"
++    return official, candidate
++
++
++def set_json_path(payload: dict, path: str, value) -> None:
++    current = payload
++    parts = path.split(".")
++    for part in parts[:-1]:
++        current = current[part]
++    current[parts[-1]] = value
++
++
+ def marker_for(candidate: dict) -> str:
+     return runner.CANDIDATE_STDOUT_MARKER + json.dumps(candidate, ensure_ascii=False, separators=(",", ":"))
+ 
+@@ -780,14 +810,16 @@ def test_runtime_symlink_resolving_into_repository_is_rejected(tmp_path):
+ 
+ 
+ @pytest.mark.parametrize(
+-    ("overrides", "expected_previous"),
++    ("overrides", "expected_previous", "expected_diagnostic"),
+     [
+-        ({"symbol": "600000"}, None),
+-        ({"mode": "historical_backfill"}, None),
+-        ({"target_date": "2026-07-14"}, None),
++        ({"symbol": "600000"}, None, True),
++        ({"mode": "historical_backfill"}, None, True),
++        ({"target_date": "2026-07-14"}, None, False),
+     ],
+ )
+-def test_previous_runs_do_not_cross_task_identity(tmp_path, overrides, expected_previous):
++def test_previous_runs_do_not_cross_task_identity(
++    tmp_path, overrides, expected_previous, expected_diagnostic
++):
+     runtime = tmp_path / "runtime"
+     manifest_date = overrides.get("target_date", "2026-07-16")
+     path = runtime / "runs" / manifest_date / "other" / "manifest.json"
+@@ -802,7 +834,11 @@ def test_previous_runs_do_not_cross_task_identity(tmp_path, overrides, expected_
+ 
+     assert reason is None
+     assert previous is expected_previous
+-    assert diagnostics == []
++    assert bool(diagnostics) is expected_diagnostic
++    if expected_diagnostic:
++        assert diagnostics == [
++            {"path": str(path), "reason": "completion invalid: completion_identity_mismatch"}
++        ]
+ 
+ 
+ def test_previous_runs_choose_latest_matching_and_skip_corrupt(tmp_path):
+@@ -830,8 +866,13 @@ def test_previous_runs_choose_latest_matching_and_skip_corrupt(tmp_path):
+ 
+     assert reason is None
+     assert previous == "new"
+-    assert len(diagnostics) == 1
++    assert len(diagnostics) == 4
+     assert diagnostics[0]["path"] == str(corrupt)
++    assert diagnostics[0]["reason"] == "invalid manifest skipped: JSONDecodeError"
++    assert all(
++        item["reason"] == "completion invalid: completion_schema_invalid"
++        for item in diagnostics[1:]
++    )
+ 
+ 
+ def test_corrupt_previous_manifest_diagnostic_is_persisted(tmp_path, monkeypatch):
+@@ -901,7 +942,7 @@ def test_write_official_success_candidate_creates_canonical_official(tmp_path, m
+     calendar = write_calendar(tmp_path / "calendar.json")
+     repo = install_temp_repo_root(monkeypatch, tmp_path)
+     candidate = eligible_official_candidate()
+-    patch_generator(monkeypatch, stdout=marker_for(candidate))
++    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
+ 
+     code, manifest = runner.execute(
+         parse_write_args(
+@@ -928,6 +969,22 @@ def test_write_official_success_candidate_creates_canonical_official(tmp_path, m
+     assert saved["official_sha256_after"] == runner.sha256_bytes(official.read_bytes())
+     assert Path(saved["candidate_path"]).read_bytes() == official.read_bytes()
+ 
++    rerun_code, rerun_manifest = runner.execute(
++        parse_write_args(
++            tmp_path,
++            calendar,
++            "--mode",
++            "historical_backfill",
++            "--date",
++            "2026-07-16",
++            "--reason",
++            "controlled replay",
++        )
++    )
++    assert rerun_code == 0
++    assert load_manifest(rerun_manifest)["reason_code"] == "already_completed"
++    assert len(calls) == 1
++
+ 
+ def test_write_official_partial_whitelist_creates_partial_not_success(tmp_path, monkeypatch):
+     calendar = write_calendar(tmp_path / "calendar.json")
+@@ -1032,8 +1089,9 @@ def test_write_official_existing_identical_is_noop_and_completed(tmp_path, monke
+     candidate = eligible_official_candidate()
+     official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+     official.write_bytes(runner._json_payload(candidate))
+-    before_sha = runner.sha256_bytes(official.read_bytes())
+-    patch_generator(monkeypatch, stdout=marker_for(candidate))
++    before = official.read_bytes()
++    before_sha = runner.sha256_bytes(before)
++    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
+ 
+     code, manifest = runner.execute(
+         parse_write_args(
+@@ -1052,8 +1110,604 @@ def test_write_official_existing_identical_is_noop_and_completed(tmp_path, monke
+     assert code == 0
+     assert saved["write_action"] == "identical_noop"
+     assert saved["reason_code"] == "official_already_identical"
++    assert saved["official_changed"] is False
++    assert saved["official_bytes_equal_candidate"] is True
+     assert saved["official_sha256_before"] == before_sha
+     assert saved["official_sha256_after"] == before_sha
++    assert saved["comparison"] is None
++    assert official.read_bytes() == before
++    assert runner.sha256_bytes(official.read_bytes()) == before_sha
++
++    rerun_code, rerun_manifest = runner.execute(
++        parse_write_args(
++            tmp_path,
++            calendar,
++            "--mode",
++            "historical_backfill",
++            "--date",
++            "2026-07-16",
++            "--reason",
++            "controlled replay",
++        )
++    )
++    assert rerun_code == 0
++    assert load_manifest(rerun_manifest)["reason_code"] == "already_completed"
++    assert len(calls) == 1
++
++
++def test_write_official_only_approved_timestamps_differ_is_semantic_noop(tmp_path, monkeypatch):
++    calendar = write_calendar(tmp_path / "calendar.json")
++    repo = install_temp_repo_root(monkeypatch, tmp_path)
++    official_payload, candidate = semantic_timestamp_pair()
++    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
++    official.write_bytes(runner._json_payload(official_payload))
++    before = official.read_bytes()
++    before_sha = runner.sha256_bytes(before)
++    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
++
++    args = parse_write_args(
++        tmp_path,
++        calendar,
++        "--mode",
++        "historical_backfill",
++        "--date",
++        "2026-07-16",
++        "--reason",
++        "controlled replay",
++    )
++    code, manifest = runner.execute(args)
++
++    saved = load_manifest(manifest)
++    comparison = saved["comparison"]
++    assert code == 0
++    assert saved["write_action"] == "semantic_noop"
++    assert saved["outcome"] == "official_unchanged"
++    assert saved["reason_code"] == "official_semantically_identical"
++    assert saved["official_changed"] is False
++    assert saved["official_bytes_equal_candidate"] is False
++    assert official.read_bytes() == before
++    assert comparison["comparison_mode"] == runner.oft.SEMANTIC_COMPARISON_MODE
++    assert comparison["excluded_json_paths"] == list(runner.oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
++    assert comparison["candidate_raw_sha256"] != comparison["official_raw_sha256"]
++    assert comparison["candidate_semantic_sha256"] == comparison["official_semantic_sha256"]
++    assert comparison["excluded_values"]["all_paths_present"] is True
++    assert comparison["excluded_values"]["all_strings"] is True
++    assert comparison["excluded_values"]["all_valid_iso_datetime"] is True
++    assert comparison["semantic_equal"] is True
++    assert runner.sha256_bytes(official.read_bytes()) == before_sha
++    assert len(calls) == 1
++
++    rerun_code, rerun_manifest = runner.execute(args)
++    rerun_saved = load_manifest(rerun_manifest)
++    assert rerun_code == 0
++    assert rerun_saved["outcome"] == "skipped"
++    assert rerun_saved["reason_code"] == "already_completed"
++    assert rerun_saved["previous_run_id"] == saved["run_id"]
++    assert len(calls) == 1
++    assert official.read_bytes() == before
++    assert runner.sha256_bytes(official.read_bytes()) == before_sha
++
++
++def _mutate_semantic_completion(case, saved, official):
++    manifest_path = Path(saved["manifest_path"])
++    candidate_path = Path(saved["candidate_path"])
++    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
++    if case == "outcome_failed":
++        payload["outcome"] = "failed"
++    elif case == "bundle_failed":
++        payload["manifest_bundle_failed"] = True
++    elif case == "manifest_write_failed":
++        payload["outcome"] = "failed"
++        payload["reason_code"] = "manifest_write_failed"
++        payload["manifest_bundle_failed"] = True
++    elif case == "forged_reason":
++        payload["reason_code"] = "forged_reason"
++    elif case == "comparison_missing":
++        payload["comparison"] = None
++    elif case == "candidate_path_missing":
++        payload["candidate_path"] = None
++    elif case == "candidate_path_escape":
++        payload["candidate_path"] = str(candidate_path.parent.parent / "candidate.json")
++    elif case == "candidate_deleted":
++        candidate_path.unlink()
++    elif case == "candidate_symlink":
++        outside = candidate_path.parent.parent.parent / "outside-candidate.json"
++        outside.write_bytes(candidate_path.read_bytes())
++        candidate_path.unlink()
++        candidate_path.symlink_to(outside)
++    elif case == "candidate_tampered":
++        candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
++        candidate["quote"]["close"] += 1
++        candidate_path.write_text(json.dumps(candidate, ensure_ascii=False, sort_keys=True), encoding="utf-8")
++    elif case == "official_changed_true":
++        payload["official_changed"] = True
++    elif case == "before_after_differ":
++        payload["official_sha256_before"] = "0" * 64
++    elif case == "after_sha_wrong":
++        payload["official_sha256_before"] = "0" * 64
++        payload["official_sha256_after"] = "0" * 64
++        payload["comparison"]["official_raw_sha256"] = "0" * 64
++    elif case == "raw_sha_same":
++        candidate_path.write_bytes(official.read_bytes())
++        candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
++        official_payload = json.loads(official.read_text(encoding="utf-8"))
++        candidate_sha = runner.sha256_bytes(candidate_path.read_bytes())
++        payload["candidate_sha256"] = candidate_sha
++        payload["comparison"] = runner.oft.build_semantic_comparison(
++            candidate=candidate,
++            official=official_payload,
++            candidate_bytes=candidate_path.read_bytes(),
++            official_bytes=official.read_bytes(),
++            symbol="300274",
++            target_date="2026-07-16",
++        )
++    elif case == "semantic_sha_differ":
++        payload["comparison"]["candidate_semantic_sha256"] = "0" * 64
++    elif case == "excluded_paths_missing":
++        payload["comparison"]["excluded_json_paths"] = payload["comparison"]["excluded_json_paths"][:-1]
++    elif case == "excluded_paths_extra":
++        payload["comparison"]["excluded_json_paths"].append("quote.close")
++    elif case == "excluded_paths_order":
++        payload["comparison"]["excluded_json_paths"] = list(
++            reversed(payload["comparison"]["excluded_json_paths"])
++        )
++    elif case == "excluded_paths_content":
++        payload["comparison"]["excluded_json_paths"][0] = "quote.close"
++    elif case == "stage_running":
++        payload["stage"] = "running"
++    elif case == "write_official_false":
++        payload["write_official"] = False
++    elif case == "dry_run_true":
++        payload["dry_run"] = True
++    elif case == "identity_symbol":
++        payload["symbol"] = "600000"
++    elif case == "identity_date":
++        payload["target_date"] = "2026-07-15"
++    elif case == "identity_mode":
++        payload["mode"] = "today_after_close"
++    elif case == "identity_run_id":
++        payload["run_id"] = str(uuid.uuid4())
++    else:
++        raise AssertionError(f"unknown completion corruption: {case}")
++    manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
++
++
++@pytest.mark.parametrize(
++    "case",
++    [
++        "outcome_failed",
++        "bundle_failed",
++        "manifest_write_failed",
++        "forged_reason",
++        "comparison_missing",
++        "candidate_path_missing",
++        "candidate_path_escape",
++        "candidate_deleted",
++        "candidate_symlink",
++        "candidate_tampered",
++        "official_changed_true",
++        "before_after_differ",
++        "after_sha_wrong",
++        "raw_sha_same",
++        "semantic_sha_differ",
++        "excluded_paths_missing",
++        "excluded_paths_extra",
++        "excluded_paths_order",
++        "excluded_paths_content",
++        "stage_running",
++        "write_official_false",
++        "dry_run_true",
++        "identity_symbol",
++        "identity_date",
++        "identity_mode",
++        "identity_run_id",
++    ],
++)
++def test_invalid_semantic_completion_is_diagnosed_and_generator_reruns(tmp_path, monkeypatch, case):
++    calendar = write_calendar(tmp_path / "calendar.json")
++    repo = install_temp_repo_root(monkeypatch, tmp_path)
++    official_payload, candidate = semantic_timestamp_pair()
++    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
++    official.write_bytes(runner._json_payload(official_payload))
++    protected_official = official.read_bytes()
++    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
++    args = parse_write_args(
++        tmp_path,
++        calendar,
++        "--mode",
++        "historical_backfill",
++        "--date",
++        "2026-07-16",
++        "--reason",
++        "completion corruption regression",
++    )
++    first_code, first_manifest = runner.execute(args)
++    first = load_manifest(first_manifest)
++    assert first_code == 0
++    assert first["write_action"] == "semantic_noop"
++
++    _mutate_semantic_completion(case, first, official)
++    rerun_code, rerun_manifest = runner.execute(args)
++    rerun = load_manifest(rerun_manifest)
++
++    assert rerun_code == 0
++    assert rerun["reason_code"] != "already_completed"
++    assert len(calls) == 2
++    assert any(
++        item["path"] == first["manifest_path"] and item["reason"].startswith("completion invalid:")
++        for item in rerun["scan_diagnostics"]
++    )
++    assert official.read_bytes() == protected_official
++
++
++def test_semantic_noop_bundle_failure_rerun_converges(tmp_path, monkeypatch):
++    calendar = write_calendar(tmp_path / "calendar.json")
++    repo = install_temp_repo_root(monkeypatch, tmp_path)
++    official_payload, candidate = semantic_timestamp_pair()
++    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
++    official.write_bytes(runner._json_payload(official_payload))
++    protected_official = official.read_bytes()
++    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
++    original_build_context = runner.build_context
++    build_count = 0
++
++    def collide_first_summary(args, runtime_dir, target_date, mode):
++        nonlocal build_count
++        ctx = original_build_context(args, runtime_dir, target_date, mode)
++        build_count += 1
++        if build_count == 1:
++            ctx.summary_path.mkdir(parents=True)
++        return ctx
++
++    monkeypatch.setattr(runner, "build_context", collide_first_summary)
++    args = parse_write_args(
++        tmp_path,
++        calendar,
++        "--mode",
++        "historical_backfill",
++        "--date",
++        "2026-07-16",
++        "--reason",
++        "bundle failure convergence",
++    )
++
++    first_code, first_manifest = runner.execute(args)
++    first = load_manifest(first_manifest)
++    assert first_code == 1
++    assert first["write_action"] == "semantic_noop"
++    assert first["outcome"] == "failed"
++    assert first["reason_code"] == "manifest_write_failed"
++    assert first["manifest_bundle_failed"] is True
++
++    failed_review = phase_c.generate_review(
++        phase_c.ReviewOptions(
++            runtime_dir=tmp_path / "phase-c-failed-bundle",
++            runner_runtime_dir=tmp_path / "runtime",
++            symbol="300274",
++            trade_date="2026-07-16",
++            runner_manifest_path=Path(first["manifest_path"]),
++            repo_root=repo,
++            official_lock_dir=tmp_path / "phase-c-failed-locks",
++            now=lambda: datetime(2026, 7, 16, 16, 31, tzinfo=ZoneInfo("Asia/Shanghai")),
++        )
++    )
++    failed_review_payload = json.loads(failed_review.manifest_path.read_text(encoding="utf-8"))
++    assert failed_review_payload["artifact_type"] == "incident_review"
++    assert failed_review_payload["review_state"] == "needs_manual_review"
++
++    rerun_code, rerun_manifest = runner.execute(args)
++    rerun = load_manifest(rerun_manifest)
++    assert rerun_code == 0
++    assert rerun["write_action"] == "semantic_noop"
++    assert rerun["reason_code"] == "official_semantically_identical"
++    assert any(
++        item["path"] == first["manifest_path"] and item["reason"] == "completion invalid: completion_outcome_failed"
++        for item in rerun["scan_diagnostics"]
++    )
++    assert len(calls) == 2
++    assert official.read_bytes() == protected_official
++
++
++def test_completion_scan_runs_while_runner_lock_is_held(tmp_path, monkeypatch):
++    calendar = write_calendar(tmp_path / "calendar.json")
++    patch_validator(monkeypatch)
++    patch_generator(monkeypatch)
++    original_scan = runner.scan_previous_runs
++    observed = []
++
++    def assert_locked(runtime_dir, target_date, **kwargs):
++        probe_args = parse_args(tmp_path, calendar, "--now", "2026-07-16T15:25:00+08:00")
++        probe = runner.build_context(probe_args, runtime_dir, target_date, kwargs["mode"])
++        with runner.runner_lock(probe) as acquired:
++            observed.append(acquired)
++        return original_scan(runtime_dir, target_date, **kwargs)
++
++    monkeypatch.setattr(runner, "scan_previous_runs", assert_locked)
++    code, manifest = runner.execute(parse_args(tmp_path, calendar, "--now", "2026-07-16T15:25:00+08:00"))
++
++    assert code == 0
++    assert load_manifest(manifest)["outcome"] == "success"
++    assert observed == [False]
++
++
++def test_phase_b_semantic_noop_manifest_is_accepted_by_phase_c_with_real_validator(tmp_path, monkeypatch):
++    calendar = write_calendar(tmp_path / "calendar.json")
++    repo = install_temp_repo_root(monkeypatch, tmp_path)
++    official_payload, candidate = semantic_timestamp_pair()
++    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
++    official.write_bytes(runner._json_payload(official_payload))
++    before = official.read_bytes()
++    before_sha = runner.sha256_bytes(before)
++    patch_generator(monkeypatch, stdout=marker_for(candidate))
++
++    code, manifest = runner.execute(
++        parse_write_args(
++            tmp_path,
++            calendar,
++            "--mode",
++            "historical_backfill",
++            "--date",
++            "2026-07-16",
++            "--reason",
++            "cross-stage semantic noop integration",
++        )
++    )
++    saved = load_manifest(manifest)
++    assert code == 0, {
++        key: saved.get(key)
++        for key in ("outcome", "reason_code", "write_action", "validator", "official_validator_before", "exception")
++    }
++    assert saved["write_action"] == "semantic_noop"
++    assert phase_c.oft.build_semantic_comparison is runner.oft.build_semantic_comparison
++
++    result = phase_c.generate_review(
++        phase_c.ReviewOptions(
++            runtime_dir=tmp_path / "phase-c-runtime",
++            runner_runtime_dir=tmp_path / "runtime",
++            symbol="300274",
++            trade_date="2026-07-16",
++            runner_manifest_path=Path(saved["manifest_path"]),
++            repo_root=repo,
++            official_lock_dir=tmp_path / "phase-c-locks",
++            now=lambda: datetime(2026, 7, 16, 16, 30, tzinfo=ZoneInfo("Asia/Shanghai")),
++        )
++    )
++    review = json.loads(result.manifest_path.read_text(encoding="utf-8"))
++    assert result.status == "review_created"
++    assert review["artifact_type"] == "facts_review"
++    assert review["write_action"] == "semantic_noop"
++    assert review["evidence_summary"]["semantic_comparison"] == saved["comparison"]
++    assert official.read_bytes() == before
++    assert runner.sha256_bytes(official.read_bytes()) == before_sha
++
++
++def test_write_official_schema_version_difference_is_not_semantic_noop(tmp_path, monkeypatch):
++    calendar = write_calendar(tmp_path / "calendar.json")
++    repo = install_temp_repo_root(monkeypatch, tmp_path)
++    official_payload, candidate = semantic_timestamp_pair()
++    official_payload["schema_version"] = "facts_pack_v0.1"
++    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
++    official.write_bytes(runner._json_payload(official_payload))
++    before = official.read_bytes()
++    patch_generator(monkeypatch, stdout=marker_for(candidate))
++
++    code, manifest = runner.execute(
++        parse_write_args(
++            tmp_path,
++            calendar,
++            "--mode",
++            "historical_backfill",
++            "--date",
++            "2026-07-16",
++            "--reason",
++            "schema mismatch replay",
++        )
++    )
++    saved = load_manifest(manifest)
++    assert code == 2
++    assert saved["write_action"] == "conflict_blocked"
++    assert saved["comparison"]["semantic_equal"] is False
++    assert official.read_bytes() == before
++
++
++@pytest.mark.parametrize("side", ["candidate", "official"])
++@pytest.mark.parametrize("path", runner.oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
++def test_write_official_any_approved_timestamp_without_timezone_is_rejected(
++    tmp_path,
++    monkeypatch,
++    side,
++    path,
++):
++    calendar = write_calendar(tmp_path / "calendar.json")
++    repo = install_temp_repo_root(monkeypatch, tmp_path)
++    official_payload, candidate = semantic_timestamp_pair()
++    target = candidate if side == "candidate" else official_payload
++    set_json_path(target, path, "2026-07-16T09:00:00")
++    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
++    official.write_bytes(runner._json_payload(official_payload))
++    before = official.read_bytes()
++    patch_generator(monkeypatch, stdout=marker_for(candidate))
++
++    code, manifest = runner.execute(
++        parse_write_args(
++            tmp_path,
++            calendar,
++            "--mode",
++            "historical_backfill",
++            "--date",
++            "2026-07-16",
++            "--reason",
++            "timezone rejection replay",
++        )
++    )
++    saved = load_manifest(manifest)
++    assert code == 2
++    assert saved["write_action"] == "conflict_blocked"
++    assert saved["comparison"]["excluded_values"]["all_valid_iso_datetime"] is False
++    assert official.read_bytes() == before
++
++
++@pytest.mark.parametrize(
++    "path",
++    [
++        "missing.market_indices",
++        "needs_manual_check.market_indices",
++        "volume_ratio.candidate_value",
++    ],
++)
++def test_write_official_deleted_business_field_is_conflict(tmp_path, monkeypatch, path):
++    calendar = write_calendar(tmp_path / "calendar.json")
++    repo = install_temp_repo_root(monkeypatch, tmp_path)
++    official_payload, candidate = semantic_timestamp_pair()
++    parent, key = path.rsplit(".", 1)
++    current = candidate
++    for part in parent.split("."):
++        current = current[part]
++    del current[key]
++    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
++    official.write_bytes(runner._json_payload(official_payload))
++    before = official.read_bytes()
++    patch_generator(monkeypatch, stdout=marker_for(candidate))
++
++    code, manifest = runner.execute(
++        parse_write_args(
++            tmp_path,
++            calendar,
++            "--mode",
++            "historical_backfill",
++            "--date",
++            "2026-07-16",
++            "--reason",
++            "business field deletion replay",
++        )
++    )
++    saved = load_manifest(manifest)
++    assert code == 2
++    assert saved["write_action"] == "conflict_blocked"
++    assert saved["comparison"]["candidate_semantic_sha256"] != saved["comparison"]["official_semantic_sha256"]
++    assert saved["comparison"]["semantic_equal"] is False
++    assert official.read_bytes() == before
++
++
++@pytest.mark.parametrize(
++    ("path", "value"),
++    [
++        ("quote.high", 999.0),
++        ("quote.amount", 999999.0),
++        ("quote.turnover_rate", 9.9),
++        ("volume_ratio.confirmed_value", 9.9),
++        ("missing.market_indices", "changed"),
++        ("needs_manual_check.market_indices", True),
++    ],
++)
++def test_write_official_business_change_remains_conflict(tmp_path, monkeypatch, path, value):
++    calendar = write_calendar(tmp_path / "calendar.json")
++    repo = install_temp_repo_root(monkeypatch, tmp_path)
++    official_payload, candidate = semantic_timestamp_pair()
++    set_json_path(candidate, path, value)
++    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
++    official.write_bytes(runner._json_payload(official_payload))
++    before = official.read_bytes()
++    patch_generator(monkeypatch, stdout=marker_for(candidate))
++
++    code, manifest = runner.execute(
++        parse_write_args(
++            tmp_path,
++            calendar,
++            "--mode",
++            "historical_backfill",
++            "--date",
++            "2026-07-16",
++            "--reason",
++            "controlled replay",
++        )
++    )
++
++    saved = load_manifest(manifest)
++    assert code == 2
++    assert saved["write_action"] == "conflict_blocked"
++    assert saved["reason_code"] == "official_conflict"
++    assert saved["comparison"]["candidate_semantic_sha256"] != saved["comparison"]["official_semantic_sha256"]
++    assert saved["comparison"]["semantic_equal"] is False
++    assert official.read_bytes() == before
++
++
++def test_write_official_unknown_field_remains_conflict(tmp_path, monkeypatch):
++    calendar = write_calendar(tmp_path / "calendar.json")
++    repo = install_temp_repo_root(monkeypatch, tmp_path)
++    official_payload, candidate = semantic_timestamp_pair()
++    candidate["unknown_business_field"] = "must-not-be-ignored"
++    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
++    official.write_bytes(runner._json_payload(official_payload))
++    patch_generator(monkeypatch, stdout=marker_for(candidate))
++
++    code, manifest = runner.execute(
++        parse_write_args(
++            tmp_path,
++            calendar,
++            "--mode",
++            "historical_backfill",
++            "--date",
++            "2026-07-16",
++            "--reason",
++            "controlled replay",
++        )
++    )
++    assert code == 2
++    assert load_manifest(manifest)["write_action"] == "conflict_blocked"
++
++
++@pytest.mark.parametrize(
++    ("mutation", "expected_check"),
++    [
++        ("approved_path_missing", "all_paths_present"),
++        ("timestamp_wrong_type", "all_strings"),
++        ("timestamp_invalid", "all_valid_iso_datetime"),
++        ("non_whitelist_fetched_at", "semantic_equal"),
++    ],
++)
++def test_write_official_invalid_semantic_evidence_remains_conflict(
++    tmp_path,
++    monkeypatch,
++    mutation,
++    expected_check,
++):
++    calendar = write_calendar(tmp_path / "calendar.json")
++    repo = install_temp_repo_root(monkeypatch, tmp_path)
++    official_payload, candidate = semantic_timestamp_pair()
++    if mutation == "approved_path_missing":
++        del candidate["volume_ratio"]["snapshot_ohlc_check"]["fetched_at"]
++    elif mutation == "timestamp_wrong_type":
++        candidate["run"]["fetched_at"] = 123
++    elif mutation == "timestamp_invalid":
++        candidate["generated_at"] = "not-a-timestamp"
++    else:
++        official_payload["volume_ratio"]["extra_check"] = {"fetched_at": "2026-07-16T08:00:06Z"}
++        candidate["volume_ratio"]["extra_check"] = {"fetched_at": "2026-07-16T09:00:06Z"}
++    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
++    official.write_bytes(runner._json_payload(official_payload))
++    patch_generator(monkeypatch, stdout=marker_for(candidate))
++
++    code, manifest = runner.execute(
++        parse_write_args(
++            tmp_path,
++            calendar,
++            "--mode",
++            "historical_backfill",
++            "--date",
++            "2026-07-16",
++            "--reason",
++            "controlled replay",
++        )
++    )
++    saved = load_manifest(manifest)
++    assert code == 2
++    assert saved["write_action"] == "conflict_blocked"
++    assert saved["comparison"]["excluded_json_paths"] == list(runner.oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
++    if expected_check == "semantic_equal":
++        assert saved["comparison"]["semantic_equal"] is False
++    else:
++        assert saved["comparison"]["excluded_values"][expected_check] is False
+ 
+ 
+ def test_write_official_existing_different_conflict_blocks(tmp_path, monkeypatch):
+diff --git a/tools/generate_daily_facts.py b/tools/generate_daily_facts.py
+index 5f53513..ac40c09 100644
+--- a/tools/generate_daily_facts.py
++++ b/tools/generate_daily_facts.py
+@@ -1858,7 +1858,7 @@ def write_generated_facts_transaction(
+             lock_dir=lock_dir,
+             enforce_canonical_path=True,
+         )
+-        should_write = result.write_action in {"created", "identical_noop"}
++        should_write = result.official_changed
+         final_sha256 = result.official_sha256_after
+     elif should_write:
+         should_write = False
+diff --git a/tools/official_facts_transaction.py b/tools/official_facts_transaction.py
+index e2cbc08..7344529 100644
+--- a/tools/official_facts_transaction.py
++++ b/tools/official_facts_transaction.py
+@@ -2,6 +2,8 @@
+ 
+ from __future__ import annotations
+ 
++import copy
++import hashlib
+ import json
+ import math
+ import os
+@@ -13,6 +15,7 @@ from typing import Any, Callable
+ 
+ from tools import official_facts_lock as ofl
+ from tools import validate_review_chain as vrc
++from tools import volume_ratio_evidence as vre
+ 
+ 
+ OFFICIAL_DAILY_DIR = Path("data") / "daily"
+@@ -36,6 +39,15 @@ CORE_QUOTE_FIELDS = (
+ )
+ VOLUME_RATIO_ALLOWED_STATUSES = {"confirmed", "derived_confirmed"}
+ VOLUME_RATIO_BLOCKED_STATUSES = {"candidate", "conflict", "stale", "unavailable", "rejected", "needs_manual_check"}
++SEMANTIC_NOOP_EXCLUDED_JSON_PATHS = (
++    "generated_at",
++    "quote_verification.fetched_at",
++    "run.fetched_at",
++    "volume_ratio.five_day_volume_check.fetched_at",
++    "volume_ratio.snapshot_ohlc_check.fetched_at",
++    "volume_ratio.verification.fetched_at",
++)
++SEMANTIC_COMPARISON_MODE = "approved_timestamp_paths_v1"
+ 
+ 
+ @dataclass(frozen=True)
+@@ -62,6 +74,119 @@ class OfficialWriteResult:
+     official_changed: bool = False
+     official_bytes_equal_candidate: bool | None = None
+     post_write_error: dict[str, Any] | None = None
++    comparison: dict[str, Any] | None = None
++
++
++def semantic_json_bytes(payload: dict[str, Any]) -> bytes:
++    """Serialize normalized facts deterministically for semantic hashing."""
++
++    return json.dumps(
++        payload,
++        ensure_ascii=False,
++        sort_keys=True,
++        separators=(",", ":"),
++        allow_nan=False,
++    ).encode("utf-8")
++
++
++def _pop_exact_json_path(payload: dict[str, Any], path: str) -> tuple[bool, object]:
++    parts = path.split(".")
++    current: object = payload
++    for part in parts[:-1]:
++        if not isinstance(current, dict) or part not in current:
++            return False, None
++        current = current[part]
++    if not isinstance(current, dict) or parts[-1] not in current:
++        return False, None
++    return True, current.pop(parts[-1])
++
++
++def build_semantic_comparison(
++    *,
++    candidate: dict[str, Any],
++    official: dict[str, Any],
++    candidate_bytes: bytes,
++    official_bytes: bytes,
++    symbol: str,
++    target_date: str,
++) -> dict[str, Any]:
++    """Compare facts while excluding only the six approved timestamp paths."""
++
++    candidate_raw_sha = hashlib.sha256(candidate_bytes).hexdigest()
++    official_raw_sha = hashlib.sha256(official_bytes).hexdigest()
++    result: dict[str, Any] = {
++        "comparison_mode": SEMANTIC_COMPARISON_MODE,
++        "candidate_raw_sha256": candidate_raw_sha,
++        "official_raw_sha256": official_raw_sha,
++        "candidate_semantic_sha256": None,
++        "official_semantic_sha256": None,
++        "excluded_json_paths": list(SEMANTIC_NOOP_EXCLUDED_JSON_PATHS),
++        "excluded_values": {
++            "candidate_types": {},
++            "official_types": {},
++            "all_paths_present": False,
++            "all_strings": False,
++            "all_valid_iso_datetime": False,
++        },
++        "semantic_equal": False,
++        "official_changed": False,
++    }
++    candidate_schema = candidate.get("schema_version")
++    identity_equal = (
++        candidate.get("symbol") == official.get("symbol") == symbol
++        and candidate.get("trade_date") == official.get("trade_date") == target_date
++        and isinstance(candidate_schema, str)
++        and candidate_schema == official.get("schema_version")
++    )
++    if not identity_equal:
++        return result
++
++    candidate_semantic = copy.deepcopy(candidate)
++    official_semantic = copy.deepcopy(official)
++    all_present = True
++    all_strings = True
++    all_valid_iso = True
++    for path in SEMANTIC_NOOP_EXCLUDED_JSON_PATHS:
++        candidate_present, candidate_value = _pop_exact_json_path(candidate_semantic, path)
++        official_present, official_value = _pop_exact_json_path(official_semantic, path)
++        all_present = all_present and candidate_present and official_present
++        candidate_type = type(candidate_value).__name__ if candidate_present else "missing"
++        official_type = type(official_value).__name__ if official_present else "missing"
++        result["excluded_values"]["candidate_types"][path] = candidate_type
++        result["excluded_values"]["official_types"][path] = official_type
++        values_are_strings = (
++            candidate_present
++            and official_present
++            and isinstance(candidate_value, str)
++            and isinstance(official_value, str)
++        )
++        all_strings = all_strings and values_are_strings
++        if values_are_strings:
++            try:
++                vre.parse_timezone_datetime(candidate_value, field=f"candidate.{path}")
++                vre.parse_timezone_datetime(official_value, field=f"official.{path}")
++            except vre.EvidenceError:
++                all_valid_iso = False
++        else:
++            all_valid_iso = False
++    result["excluded_values"]["all_paths_present"] = all_present
++    result["excluded_values"]["all_strings"] = all_strings
++    result["excluded_values"]["all_valid_iso_datetime"] = all_valid_iso
++    if not (all_present and all_strings and all_valid_iso):
++        return result
++
++    try:
++        candidate_semantic_sha = hashlib.sha256(semantic_json_bytes(candidate_semantic)).hexdigest()
++        official_semantic_sha = hashlib.sha256(semantic_json_bytes(official_semantic)).hexdigest()
++    except (TypeError, ValueError):
++        return result
++    result["candidate_semantic_sha256"] = candidate_semantic_sha
++    result["official_semantic_sha256"] = official_semantic_sha
++    result["semantic_equal"] = (
++        candidate_semantic == official_semantic
++        and candidate_semantic_sha == official_semantic_sha
++    )
++    return result
+ 
+ 
+ def canonical_official_path(repo_root: Path, symbol: str, target_date: str) -> Path:
+@@ -397,8 +522,45 @@ def promote_candidate_to_official(
+                 {**partial_policy.__dict__},
+                 validator_before,
+                 validator_before,
++                False,
++                True,
+             )
+         if official_bytes is not None:
++            official_validator = _validator_summary(
++                existing,
++                official_path=official_path,
++                target_date=target_date,
++                validator=validator,
++            )
++            comparison = build_semantic_comparison(
++                candidate=candidate,
++                official=existing,
++                candidate_bytes=candidate_bytes,
++                official_bytes=official_bytes,
++                symbol=symbol,
++                target_date=target_date,
++            )
++            if (
++                official_validator.get("status") == "passed"
++                and comparison.get("semantic_equal") is True
++            ):
++                return OfficialWriteResult(
++                    "semantic_noop",
++                    "official_unchanged",
++                    "official_semantically_identical",
++                    official_path,
++                    exists_before,
++                    before_sha,
++                    before_sha,
++                    candidate_sha,
++                    {**partial_policy.__dict__},
++                    validator_before,
++                    official_validator,
++                    False,
++                    False,
++                    None,
++                    comparison,
++                )
+             return OfficialWriteResult(
+                 "conflict_blocked",
+                 "needs_manual_review",
+@@ -410,7 +572,8 @@ def promote_candidate_to_official(
+                 candidate_sha,
+                 {**partial_policy.__dict__},
+                 validator_before,
+-                {"status": "not_run"},
++                official_validator,
++                comparison=comparison,
+             )
+         final_bytes, after_sha, post_write_error = _write_bytes_locked(
+             official_path,
+diff --git a/tools/review_manifest.py b/tools/review_manifest.py
+index bbb9622..c50d0e1 100644
+--- a/tools/review_manifest.py
++++ b/tools/review_manifest.py
+@@ -16,7 +16,6 @@ import json
+ import os
+ import re
+ import shutil
+-import stat
+ import tempfile
+ import uuid
+ from dataclasses import dataclass
+@@ -28,6 +27,8 @@ from zoneinfo import ZoneInfo
+ try:
+     from tools import official_facts_lock as ofl
+     from tools import official_facts_transaction as oft
++    from tools import phase_b_completion as pbc
++    from tools import safe_file_read as sfr
+     from tools import validate_review_chain as vrc
+ except ModuleNotFoundError:  # pragma: no cover - direct execution fallback
+     import sys
+@@ -35,6 +36,8 @@ except ModuleNotFoundError:  # pragma: no cover - direct execution fallback
+     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+     from tools import official_facts_lock as ofl
+     from tools import official_facts_transaction as oft
++    from tools import phase_b_completion as pbc
++    from tools import safe_file_read as sfr
+     from tools import validate_review_chain as vrc
+ 
+ 
+@@ -176,55 +179,7 @@ class ReviewResult:
+     reason_code: str | None = None
+ 
+ 
+-@dataclass(frozen=True)
+-class PhaseBWriteSemantic:
+-    outcomes: frozenset[str]
+-    official_changed: bool
+-    after_sha_required: bool
+-
+-
+-# Extracted from official_facts_transaction.promote_candidate_to_official(),
+-# run_daily_facts_after_close.py, and run_daily_facts_after_close_phase_b_v0.2.md.
+-# Keep this as the single Phase C gate for Phase B's existing transaction names.
+-PHASE_B_WRITE_SEMANTICS = {
+-    ("created", "official_written"): PhaseBWriteSemantic(frozenset({"success"}), True, True),
+-    ("created", "official_written_partial"): PhaseBWriteSemantic(frozenset({"partial"}), True, True),
+-    ("created", "official_written_manifest_failed"): PhaseBWriteSemantic(
+-        frozenset({"success", "partial"}), True, True
+-    ),
+-    ("identical_noop", "official_already_identical"): PhaseBWriteSemantic(
+-        frozenset({"success", "partial"}), False, True
+-    ),
+-    ("identical_noop", "official_written_manifest_failed"): PhaseBWriteSemantic(
+-        frozenset({"success", "partial"}), False, True
+-    ),
+-    ("semantic_noop", "official_semantically_identical"): PhaseBWriteSemantic(
+-        frozenset({"official_unchanged"}), False, True
+-    ),
+-    ("conflict_blocked", "official_conflict"): PhaseBWriteSemantic(
+-        frozenset({"needs_manual_review"}), False, False
+-    ),
+-    ("conflict_blocked", "official_invalid"): PhaseBWriteSemantic(
+-        frozenset({"needs_manual_review"}), False, False
+-    ),
+-    ("sealed_blocked", "sealed_exists"): PhaseBWriteSemantic(frozenset({"skipped"}), False, True),
+-    ("manual_blocked", "manual_exists"): PhaseBWriteSemantic(frozenset({"skipped"}), False, True),
+-    ("not_eligible", "partial_not_eligible_for_official"): PhaseBWriteSemantic(
+-        frozenset({"needs_manual_review"}), False, False
+-    ),
+-    ("not_eligible", "validator_failed"): PhaseBWriteSemantic(
+-        frozenset({"needs_manual_review"}), False, False
+-    ),
+-    ("not_eligible", "candidate_not_eligible_for_official"): PhaseBWriteSemantic(
+-        frozenset({"needs_manual_review"}), False, False
+-    ),
+-    ("created_postcheck_failed", "official_written_postcheck_failed"): PhaseBWriteSemantic(
+-        frozenset({"needs_manual_review"}), True, False
+-    ),
+-    ("created_postcheck_failed", "official_written_bytes_mismatch"): PhaseBWriteSemantic(
+-        frozenset({"needs_manual_review"}), True, False
+-    ),
+-}
++PHASE_B_WRITE_SEMANTICS = pbc.PHASE_B_WRITE_SEMANTICS
+ 
+ 
+ def sanitize_text(value: object, *, limit: int = 1000) -> str:
+@@ -383,57 +338,12 @@ def _read_regular_file_beneath(
+     label: str,
+     missing_ok: bool = False,
+ ) -> tuple[bytes | None, Path]:
+-    """Read one regular file through an O_NOFOLLOW fd chain below ``root``."""
+-
+-    if not hasattr(os, "O_NOFOLLOW"):
+-        raise ReviewError(reason_code, f"{label} cannot be read safely on this platform")
+-    root_path = _absolute_lexical_path(root)
+-    target_path = _absolute_lexical_path(path)
+-    if not _inside(target_path, root_path):
+-        raise ReviewError(reason_code, f"{label} escapes its allowed root")
+-    root_resolved = root_path.resolve(strict=False)
+-    target_resolved = target_path.resolve(strict=False)
+-    if not _inside(target_resolved, root_resolved):
+-        raise ReviewError(reason_code, f"{label} resolves outside its allowed root")
+-
+-    relative = target_path.relative_to(root_path)
+-    if not relative.parts:
+-        raise ReviewError(reason_code, f"{label} must name a regular file below its allowed root")
+-    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+-    file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+-    descriptors: list[int] = []
++    """Read one regular file through the shared no-follow fd helper."""
++
+     try:
+-        current = os.open(root_path, directory_flags)
+-        descriptors.append(current)
+-        if not stat.S_ISDIR(os.fstat(current).st_mode):
+-            raise ReviewError(reason_code, f"{label} allowed root is not a directory")
+-        for component in relative.parts[:-1]:
+-            current = os.open(component, directory_flags, dir_fd=current)
+-            descriptors.append(current)
+-            if not stat.S_ISDIR(os.fstat(current).st_mode):
+-                raise ReviewError(reason_code, f"{label} parent is not a directory")
+-        descriptor = os.open(relative.parts[-1], file_flags, dir_fd=current)
+-        descriptors.append(descriptor)
+-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+-            raise ReviewError(reason_code, f"{label} is not a regular file")
+-        chunks: list[bytes] = []
+-        while True:
+-            chunk = os.read(descriptor, 1024 * 1024)
+-            if not chunk:
+-                break
+-            chunks.append(chunk)
+-        return b"".join(chunks), target_path
+-    except FileNotFoundError as exc:
+-        if missing_ok:
+-            return None, target_path
+-        raise ReviewError(reason_code, f"{label} is missing") from exc
+-    except ReviewError:
+-        raise
+-    except OSError as exc:
+-        raise ReviewError(reason_code, f"{label} is unsafe or unreadable: {sanitize_text(exc)}") from exc
+-    finally:
+-        for descriptor in reversed(descriptors):
+-            os.close(descriptor)
++        return sfr.read_regular_file_beneath(path, root=root, label=label, missing_ok=missing_ok)
++    except sfr.SafeFileReadError as exc:
++        raise ReviewError(reason_code, sanitize_text(exc)) from exc
+ 
+ 
+ def _read_locked_official(
+diff --git a/tools/run_daily_facts_after_close.py b/tools/run_daily_facts_after_close.py
+index 845b397..fe9bf33 100644
+--- a/tools/run_daily_facts_after_close.py
++++ b/tools/run_daily_facts_after_close.py
+@@ -32,11 +32,15 @@ from zoneinfo import ZoneInfo
+ try:
+     from tools import official_facts_lock as ofl
+     from tools import official_facts_transaction as oft
++    from tools import phase_b_completion as pbc
++    from tools import safe_file_read as sfr
+     from tools import validate_review_chain as vrc
+ except ModuleNotFoundError:  # pragma: no cover - direct execution fallback
+     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+     from tools import official_facts_lock as ofl
+     from tools import official_facts_transaction as oft
++    from tools import phase_b_completion as pbc
++    from tools import safe_file_read as sfr
+     from tools import validate_review_chain as vrc
+ 
+ 
+@@ -360,16 +364,25 @@ def scan_previous_runs(
+     symbol: str,
+     mode: str,
+     write_official: bool = True,
++    repo_root: Path | None = None,
++    official_path: Path | None = None,
++    official_lock_dir: Path | None = None,
+ ) -> tuple[str | None, str | None, list[dict[str, str]]]:
+     runs_dir = runtime_dir / "runs" / target_date.isoformat()
+     diagnostics: list[dict[str, str]] = []
+     if not runs_dir.exists():
+         return None, None, diagnostics
+-    matching: list[tuple[datetime, str, dict[str, Any]]] = []
++    matching: list[tuple[datetime, str, dict[str, Any], Path]] = []
+     for manifest_path in sorted(runs_dir.glob("*/manifest.json")):
+         try:
+-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+-        except (OSError, json.JSONDecodeError) as exc:
++            raw, safe_manifest_path = sfr.read_regular_file_beneath(
++                manifest_path,
++                root=runtime_dir,
++                label="previous runner manifest",
++            )
++            assert raw is not None
++            manifest = json.loads(raw.decode("utf-8"))
++        except (sfr.SafeFileReadError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+             diagnostics.append(
+                 {
+                     "path": str(manifest_path),
+@@ -385,24 +398,81 @@ def scan_previous_runs(
+             or manifest.get("symbol") != symbol
+             or manifest.get("mode") != mode
+         ):
++            if write_official:
++                diagnostics.append(
++                    {
++                        "path": str(manifest_path),
++                        "reason": "completion invalid: completion_identity_mismatch",
++                    }
++                )
+             continue
+         current_id = manifest.get("run_id")
+         timestamp = _manifest_timestamp(manifest)
+         if not isinstance(current_id, str) or not current_id or timestamp is None:
+             diagnostics.append({"path": str(manifest_path), "reason": "incomplete matching manifest skipped"})
+             continue
+-        matching.append((timestamp, current_id, manifest))
++        matching.append((timestamp, current_id, manifest, safe_manifest_path))
+     if not matching:
+         return None, None, diagnostics
+     matching.sort(key=lambda item: (item[0], item[1]))
+     previous_run_id = matching[-1][1]
+-    completed = any(
+-        manifest.get("write_official") is True
+-        and manifest.get("dry_run") is False
+-        and manifest.get("write_action") in {"created", "identical_noop"}
+-        for _, _, manifest in matching
+-    )
+     if not write_official:
++        return None, previous_run_id, diagnostics
++
++    effective_repo_root = repo_root or REPO_ROOT
++    effective_official_path = official_path or official_path_for(symbol, target_date)
++    try:
++        with ofl.official_facts_lock(effective_official_path, lock_dir=official_lock_dir) as lock_state:
++            try:
++                official_bytes, _safe_path = sfr.read_regular_file_beneath(
++                    effective_official_path,
++                    root=effective_repo_root,
++                    label="completion official facts",
++                    missing_ok=True,
++                )
++            except sfr.SafeFileReadError as exc:
++                official_bytes = None
++                official_read_error = sanitize_text(exc)
++            else:
++                official_read_error = None
++            lock_state.assert_held_for(effective_official_path)
++            official_sha = sha256_bytes(official_bytes) if official_bytes is not None else None
++            completed = False
++            for _, _, manifest, manifest_path in matching:
++                try:
++                    if official_read_error is not None:
++                        raise pbc.CompletionValidationError(
++                            "completion_official_unreadable",
++                            official_read_error,
++                        )
++                    pbc.validate_completion_manifest(
++                        manifest,
++                        manifest_path=manifest_path,
++                        runtime_dir=runtime_dir,
++                        repo_root=effective_repo_root,
++                        symbol=symbol,
++                        target_date=target_date.isoformat(),
++                        mode=mode,
++                        official_path=effective_official_path,
++                        official_bytes=official_bytes,
++                        official_sha256=official_sha,
++                    )
++                except pbc.CompletionValidationError as exc:
++                    diagnostics.append(
++                        {
++                            "path": str(manifest_path),
++                            "reason": f"completion invalid: {exc.reason_code}",
++                        }
++                    )
++                else:
++                    completed = True
++    except Exception as exc:  # noqa: BLE001 - completion evidence fails open to a safe rerun
++        diagnostics.append(
++            {
++                "path": str(effective_official_path),
++                "reason": sanitize_text(f"completion official lock/read failed: {type(exc).__name__}"),
++            }
++        )
+         completed = False
+     return ("already_completed" if completed else None), previous_run_id, diagnostics
+ 
+@@ -689,12 +759,15 @@ def manifest_base(
+         "official_changed": False,
+         "official_bytes_equal_candidate": None,
+         "official_post_write_error": None,
++        "comparison": None,
+         "validator": {"status": "not_run"},
+         "retry_count": 0,
+         "alerts": [],
+         "exception": None,
+         "previous_run_id": previous_run_id,
+         "scan_diagnostics": [],
++        "manifest_bundle_failed": False,
++        "manifest_bundle_reason_code": None,
+         "runtime_dir": str(ctx.runtime_dir),
+         "manifest_path": str(ctx.manifest_path),
+     }
+@@ -758,6 +831,7 @@ def summary_markdown(manifest: dict[str, Any]) -> str:
+             f"- official_sha256_after: `{manifest.get('official_sha256_after')}`",
+             f"- official_changed: `{manifest.get('official_changed')}`",
+             f"- official_bytes_equal_candidate: `{manifest.get('official_bytes_equal_candidate')}`",
++            f"- comparison_mode: `{(manifest.get('comparison') or {}).get('comparison_mode')}`",
+             f"- generator_exit_code: `{manifest.get('generator', {}).get('exit_code')}`",
+             f"- generator_result_status: `{manifest.get('generator', {}).get('result_status')}`",
+             f"- validator_status: `{manifest.get('validator', {}).get('status')}`",
+@@ -945,24 +1019,37 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
+             finish_manifest(manifest, started_monotonic=started_monotonic, last_stage="gate", outcome="skipped", reason_code="sealed_exists")
+             persisted = persist_terminal_bundle(ctx, manifest, started_monotonic=started_monotonic, include_alert=True)
+             return (0 if persisted else 1), manifest
+-        previous_reason, previous_run_id, scan_diagnostics = scan_previous_runs(
+-            runtime_dir,
+-            target_date,
+-            symbol=args.symbol,
+-            mode=mode,
+-            write_official=args.write_official,
+-        )
+-        manifest["previous_run_id"] = previous_run_id
+-        manifest["scan_diagnostics"] = scan_diagnostics
+-        if previous_reason == "already_completed":
+-            finish_manifest(manifest, started_monotonic=started_monotonic, last_stage="gate", outcome="skipped", reason_code="already_completed")
+-            persisted = persist_terminal_bundle(ctx, manifest, started_monotonic=started_monotonic, include_alert=False)
+-            return (0 if persisted else 1), manifest
+         with runner_lock(ctx) as acquired:
+             if not acquired:
+                 finish_manifest(manifest, started_monotonic=started_monotonic, last_stage="gate", outcome="skipped", reason_code="runner_already_active")
+                 persisted = persist_terminal_bundle(ctx, manifest, started_monotonic=started_monotonic, include_alert=True)
+                 return (0 if persisted else 1), manifest
++            previous_reason, previous_run_id, scan_diagnostics = scan_previous_runs(
++                runtime_dir,
++                target_date,
++                symbol=args.symbol,
++                mode=mode,
++                write_official=args.write_official,
++                repo_root=REPO_ROOT,
++                official_path=official_path,
++            )
++            manifest["previous_run_id"] = previous_run_id
++            manifest["scan_diagnostics"] = scan_diagnostics
++            if previous_reason == "already_completed":
++                finish_manifest(
++                    manifest,
++                    started_monotonic=started_monotonic,
++                    last_stage="gate",
++                    outcome="skipped",
++                    reason_code="already_completed",
++                )
++                persisted = persist_terminal_bundle(
++                    ctx,
++                    manifest,
++                    started_monotonic=started_monotonic,
++                    include_alert=False,
++                )
++                return (0 if persisted else 1), manifest
+             command = generator_command(args, target_date, ctx.candidate_path)
+             manifest["generator"]["command"] = command
+             current_stage = "fetch"
+@@ -1078,6 +1165,7 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
+                             manifest["official_changed"] = write_result.official_changed
+                             manifest["official_bytes_equal_candidate"] = write_result.official_bytes_equal_candidate
+                             manifest["official_post_write_error"] = write_result.post_write_error
++                            manifest["comparison"] = write_result.comparison
+                             last_stage = (
+                                 "validate"
+                                 if write_result.reason_code in {"official_written_postcheck_failed", "official_written_bytes_mismatch"}
+@@ -1106,6 +1194,7 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any] | None]:
+                         manifest["official_changed"] = write_result.official_changed
+                         manifest["official_bytes_equal_candidate"] = write_result.official_bytes_equal_candidate
+                         manifest["official_post_write_error"] = write_result.post_write_error
++                        manifest["comparison"] = write_result.comparison
+                         last_stage = (
+                             "validate"
+                             if write_result.reason_code in {"official_written_postcheck_failed", "official_written_bytes_mismatch"}
+diff --git a/tools/phase_b_completion.py b/tools/phase_b_completion.py
+new file mode 100644
+index 0000000..3a69abb
+--- /dev/null
++++ b/tools/phase_b_completion.py
+@@ -0,0 +1,313 @@
++"""Phase B completed-run semantics and live evidence validation."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import re
++import uuid
++from dataclasses import dataclass
++from datetime import datetime
++from pathlib import Path
++from typing import Any, Callable
++
++try:
++    from tools import official_facts_transaction as oft
++    from tools import safe_file_read as sfr
++    from tools import validate_review_chain as vrc
++except ModuleNotFoundError:  # pragma: no cover - direct execution fallback
++    import sys
++
++    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++    from tools import official_facts_transaction as oft
++    from tools import safe_file_read as sfr
++    from tools import validate_review_chain as vrc
++
++
++RUNNER_SCHEMA_VERSION = "runner_manifest_v0.2_phase_b"
++SHA_RE = re.compile(r"[0-9a-f]{64}")
++COMPLETION_ACTIONS = frozenset({"created", "identical_noop", "semantic_noop"})
++
++
++@dataclass(frozen=True)
++class PhaseBWriteSemantic:
++    outcomes: frozenset[str]
++    official_changed: bool
++    after_sha_required: bool
++
++
++# Shared by Phase B completion validation and the Phase C runner-evidence gate.
++PHASE_B_WRITE_SEMANTICS = {
++    ("created", "official_written"): PhaseBWriteSemantic(frozenset({"success"}), True, True),
++    ("created", "official_written_partial"): PhaseBWriteSemantic(frozenset({"partial"}), True, True),
++    ("created", "official_written_manifest_failed"): PhaseBWriteSemantic(
++        frozenset({"success", "partial"}), True, True
++    ),
++    ("identical_noop", "official_already_identical"): PhaseBWriteSemantic(
++        frozenset({"success", "partial"}), False, True
++    ),
++    ("identical_noop", "official_written_manifest_failed"): PhaseBWriteSemantic(
++        frozenset({"success", "partial"}), False, True
++    ),
++    ("semantic_noop", "official_semantically_identical"): PhaseBWriteSemantic(
++        frozenset({"official_unchanged"}), False, True
++    ),
++    ("conflict_blocked", "official_conflict"): PhaseBWriteSemantic(
++        frozenset({"needs_manual_review"}), False, False
++    ),
++    ("conflict_blocked", "official_invalid"): PhaseBWriteSemantic(
++        frozenset({"needs_manual_review"}), False, False
++    ),
++    ("sealed_blocked", "sealed_exists"): PhaseBWriteSemantic(frozenset({"skipped"}), False, True),
++    ("manual_blocked", "manual_exists"): PhaseBWriteSemantic(frozenset({"skipped"}), False, True),
++    ("not_eligible", "partial_not_eligible_for_official"): PhaseBWriteSemantic(
++        frozenset({"needs_manual_review"}), False, False
++    ),
++    ("not_eligible", "validator_failed"): PhaseBWriteSemantic(
++        frozenset({"needs_manual_review"}), False, False
++    ),
++    ("not_eligible", "candidate_not_eligible_for_official"): PhaseBWriteSemantic(
++        frozenset({"needs_manual_review"}), False, False
++    ),
++    ("created_postcheck_failed", "official_written_postcheck_failed"): PhaseBWriteSemantic(
++        frozenset({"needs_manual_review"}), True, False
++    ),
++    ("created_postcheck_failed", "official_written_bytes_mismatch"): PhaseBWriteSemantic(
++        frozenset({"needs_manual_review"}), True, False
++    ),
++}
++
++
++class CompletionValidationError(ValueError):
++    """A matching prior manifest is not a live, complete Phase B success."""
++
++    def __init__(self, reason_code: str, message: str):
++        super().__init__(message)
++        self.reason_code = reason_code
++
++
++def sha256_bytes(data: bytes) -> str:
++    return hashlib.sha256(data).hexdigest()
++
++
++def parse_json_object(raw: bytes, *, label: str) -> dict[str, Any]:
++    try:
++        value = json.loads(raw.decode("utf-8"))
++    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
++        raise CompletionValidationError(f"{label}_json_invalid", f"{label} is not valid UTF-8 JSON") from exc
++    if not isinstance(value, dict):
++        raise CompletionValidationError(f"{label}_json_invalid", f"{label} must be a JSON object")
++    return value
++
++
++def _aware_datetime(value: object) -> bool:
++    if not isinstance(value, str):
++        return False
++    try:
++        parsed = datetime.fromisoformat(value)
++    except ValueError:
++        return False
++    return parsed.tzinfo is not None and parsed.utcoffset() is not None
++
++
++def _require_sha(manifest: dict[str, Any], key: str) -> str:
++    value = manifest.get(key)
++    if not isinstance(value, str) or SHA_RE.fullmatch(value) is None:
++        raise CompletionValidationError("completion_sha_invalid", f"{key} must be a lowercase SHA-256")
++    return value
++
++
++def _require_validator_passed(manifest: dict[str, Any], key: str) -> None:
++    value = manifest.get(key)
++    if not isinstance(value, dict) or value.get("status") != "passed":
++        raise CompletionValidationError("completion_validator_invalid", f"{key} must record status=passed")
++
++
++def _validate_facts(
++    payload: dict[str, Any],
++    *,
++    path: Path,
++    target_date: str,
++    validator: Callable[..., None] | None,
++) -> None:
++    try:
++        check = validator or vrc.assert_facts_pack_valid
++        check(payload, facts_pack_path=str(path), date=target_date)
++    except Exception as exc:  # noqa: BLE001 - invalid evidence never counts as completion
++        raise CompletionValidationError(
++            "completion_facts_validator_failed",
++            f"facts Validator rejected {path.name}: {type(exc).__name__}",
++        ) from exc
++
++
++def validate_completion_manifest(
++    manifest: dict[str, Any],
++    *,
++    manifest_path: Path,
++    runtime_dir: Path,
++    repo_root: Path,
++    symbol: str,
++    target_date: str,
++    mode: str,
++    official_path: Path,
++    official_bytes: bytes | None,
++    official_sha256: str | None,
++    validator: Callable[..., None] | None = None,
++) -> str:
++    """Return the completed action only when every committed/live proof passes."""
++
++    if manifest.get("schema_version") != RUNNER_SCHEMA_VERSION:
++        raise CompletionValidationError("completion_schema_invalid", "runner schema is not Phase B v0.2")
++    if manifest.get("stage") != "finished" or not _aware_datetime(manifest.get("finished_at")):
++        raise CompletionValidationError("completion_stage_invalid", "runner manifest is not a finished terminal record")
++    if manifest.get("outcome") == "failed":
++        raise CompletionValidationError("completion_outcome_failed", "failed runner outcome cannot complete a task")
++    if manifest.get("manifest_bundle_failed") is True:
++        raise CompletionValidationError("completion_bundle_failed", "failed runtime bundle cannot complete a task")
++    if manifest.get("write_official") is not True or manifest.get("dry_run") is not False:
++        raise CompletionValidationError("completion_run_mode_invalid", "completion requires write_official=true and dry_run=false")
++    if (
++        manifest.get("symbol") != symbol
++        or manifest.get("target_date") != target_date
++        or manifest.get("mode") != mode
++    ):
++        raise CompletionValidationError("completion_identity_mismatch", "runner task identity does not match the scan")
++
++    run_id = manifest.get("run_id")
++    try:
++        uuid.UUID(str(run_id))
++    except (ValueError, TypeError, AttributeError) as exc:
++        raise CompletionValidationError("completion_run_id_invalid", "run_id must be a UUID") from exc
++    expected_manifest = runtime_dir / "runs" / target_date / str(run_id) / "manifest.json"
++    if manifest_path.absolute() != expected_manifest.absolute() or manifest_path.parent.name != run_id:
++        raise CompletionValidationError("completion_run_id_mismatch", "run_id does not identify the manifest directory")
++    manifest_identity = manifest.get("manifest_path")
++    if not isinstance(manifest_identity, str) or Path(manifest_identity).absolute() != manifest_path.absolute():
++        raise CompletionValidationError("completion_manifest_path_invalid", "manifest_path does not identify this manifest")
++
++    expected_official = oft.canonical_official_path(repo_root, symbol, target_date)
++    recorded_official = manifest.get("official_path")
++    if (
++        expected_official.resolve(strict=False) != official_path.resolve(strict=False)
++        or not isinstance(recorded_official, str)
++        or Path(recorded_official).resolve(strict=False) != expected_official.resolve(strict=False)
++    ):
++        raise CompletionValidationError("completion_official_path_invalid", "official_path is not canonical")
++    if official_bytes is None or official_sha256 is None:
++        raise CompletionValidationError("completion_official_missing", "current official facts are missing")
++    if sha256_bytes(official_bytes) != official_sha256:
++        raise CompletionValidationError("completion_official_read_invalid", "official SHA is not derived from its read bytes")
++
++    action = manifest.get("write_action")
++    reason_code = manifest.get("reason_code")
++    if action not in COMPLETION_ACTIONS:
++        raise CompletionValidationError("completion_action_invalid", "write_action is not a completed Phase B action")
++    semantic = PHASE_B_WRITE_SEMANTICS.get((action, reason_code))
++    if semantic is None or reason_code == "official_written_manifest_failed":
++        raise CompletionValidationError("completion_action_reason_invalid", "action and reason are not a successful completion pair")
++    if manifest.get("outcome") not in semantic.outcomes:
++        raise CompletionValidationError("completion_action_outcome_invalid", "outcome conflicts with action and reason")
++    if type(manifest.get("official_changed")) is not bool or manifest.get("official_changed") is not semantic.official_changed:
++        raise CompletionValidationError("completion_official_changed_invalid", "official_changed conflicts with action and reason")
++
++    before_sha = manifest.get("official_sha256_before")
++    after_sha = _require_sha(manifest, "official_sha256_after")
++    candidate_sha = _require_sha(manifest, "candidate_sha256")
++    if official_sha256 != after_sha:
++        raise CompletionValidationError("completion_official_drift", "current official SHA differs from recorded after SHA")
++    if before_sha is not None and (not isinstance(before_sha, str) or SHA_RE.fullmatch(before_sha) is None):
++        raise CompletionValidationError("completion_sha_invalid", "official_sha256_before is invalid")
++
++    candidate_identity = manifest.get("candidate_path")
++    expected_candidate = manifest_path.parent / "candidate.json"
++    if not isinstance(candidate_identity, str) or Path(candidate_identity).absolute() != expected_candidate.absolute():
++        raise CompletionValidationError("completion_candidate_path_invalid", "candidate_path is not the committed run candidate")
++    try:
++        candidate_bytes, candidate_path = sfr.read_regular_file_beneath(
++            expected_candidate,
++            root=runtime_dir,
++            label="completion candidate",
++        )
++    except sfr.SafeFileReadError as exc:
++        raise CompletionValidationError("completion_candidate_unreadable", str(exc)) from exc
++    assert candidate_bytes is not None
++    if sha256_bytes(candidate_bytes) != candidate_sha:
++        raise CompletionValidationError("completion_candidate_drift", "candidate bytes differ from candidate_sha256")
++    candidate = parse_json_object(candidate_bytes, label="completion_candidate")
++    official = parse_json_object(official_bytes, label="completion_official")
++    _validate_facts(candidate, path=candidate_path, target_date=target_date, validator=validator)
++    _validate_facts(official, path=official_path, target_date=target_date, validator=validator)
++    _require_validator_passed(manifest, "validator")
++    _require_validator_passed(manifest, "official_validator_before")
++    _require_validator_passed(manifest, "official_validator_after")
++
++    candidate_status = (candidate.get("run") or {}).get("status") if isinstance(candidate.get("run"), dict) else None
++    if action == "created":
++        expected_pair = (
++            ("partial", "official_written_partial", "partial")
++            if candidate_status == "partial"
++            else ("success", "official_written", "success")
++        )
++        if (candidate_status, reason_code, manifest.get("outcome")) != expected_pair:
++            raise CompletionValidationError("completion_created_status_invalid", "created status, reason, and outcome disagree")
++        if (
++            before_sha is not None
++            or manifest.get("official_exists_before") is not False
++            or manifest.get("official_bytes_equal_candidate") is not True
++            or after_sha != candidate_sha
++            or manifest.get("comparison") is not None
++        ):
++            raise CompletionValidationError("completion_created_evidence_invalid", "created SHA or byte evidence is inconsistent")
++    elif action == "identical_noop":
++        if candidate_status not in {"success", "partial"} or manifest.get("outcome") != candidate_status:
++            raise CompletionValidationError("completion_identical_status_invalid", "identical_noop outcome must match candidate status")
++        if (
++            manifest.get("official_exists_before") is not True
++            or manifest.get("official_bytes_equal_candidate") is not True
++            or before_sha != after_sha
++            or after_sha != candidate_sha
++            or manifest.get("comparison") is not None
++        ):
++            raise CompletionValidationError("completion_identical_evidence_invalid", "identical_noop SHA or byte evidence is inconsistent")
++    else:
++        comparison = manifest.get("comparison")
++        required_comparison = {
++            "comparison_mode",
++            "candidate_raw_sha256",
++            "official_raw_sha256",
++            "candidate_semantic_sha256",
++            "official_semantic_sha256",
++            "excluded_json_paths",
++            "excluded_values",
++            "semantic_equal",
++            "official_changed",
++        }
++        if (
++            manifest.get("official_exists_before") is not True
++            or manifest.get("official_bytes_equal_candidate") is not False
++            or before_sha != after_sha
++            or candidate_sha == after_sha
++            or not isinstance(comparison, dict)
++            or set(comparison) != required_comparison
++            or comparison.get("comparison_mode") != oft.SEMANTIC_COMPARISON_MODE
++            or comparison.get("excluded_json_paths") != list(oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
++            or comparison.get("candidate_raw_sha256") != candidate_sha
++            or comparison.get("official_raw_sha256") != after_sha
++            or comparison.get("semantic_equal") is not True
++            or comparison.get("official_changed") is not False
++            or comparison.get("candidate_semantic_sha256") != comparison.get("official_semantic_sha256")
++            or not isinstance(comparison.get("candidate_semantic_sha256"), str)
++            or SHA_RE.fullmatch(comparison.get("candidate_semantic_sha256")) is None
++        ):
++            raise CompletionValidationError("completion_semantic_evidence_invalid", "semantic_noop evidence is incomplete or inconsistent")
++        recomputed = oft.build_semantic_comparison(
++            candidate=candidate,
++            official=official,
++            candidate_bytes=candidate_bytes,
++            official_bytes=official_bytes,
++            symbol=symbol,
++            target_date=target_date,
++        )
++        if recomputed.get("semantic_equal") is not True or comparison != recomputed:
++            raise CompletionValidationError("completion_semantic_recompute_mismatch", "live semantic comparison differs from manifest evidence")
++    return str(action)
+diff --git a/tools/safe_file_read.py b/tools/safe_file_read.py
+new file mode 100644
+index 0000000..3b3724d
+--- /dev/null
++++ b/tools/safe_file_read.py
+@@ -0,0 +1,79 @@
++"""No-follow reads for evidence files constrained beneath an allowed root."""
++
++from __future__ import annotations
++
++import os
++import stat
++from pathlib import Path
++
++
++class SafeFileReadError(ValueError):
++    """Raised when an evidence path cannot be read without following links."""
++
++
++def _absolute_lexical_path(path: Path) -> Path:
++    return Path(os.path.abspath(os.fspath(path.expanduser())))
++
++
++def _inside(path: Path, root: Path) -> bool:
++    return path == root or root in path.parents
++
++
++def read_regular_file_beneath(
++    path: Path,
++    *,
++    root: Path,
++    label: str,
++    missing_ok: bool = False,
++) -> tuple[bytes | None, Path]:
++    """Read one regular file through a single ``O_NOFOLLOW`` fd chain."""
++
++    if not hasattr(os, "O_NOFOLLOW"):
++        raise SafeFileReadError(f"{label} cannot be read safely on this platform")
++    root_path = _absolute_lexical_path(root)
++    target_path = _absolute_lexical_path(path)
++    if not _inside(target_path, root_path):
++        raise SafeFileReadError(f"{label} escapes its allowed root")
++    root_resolved = root_path.resolve(strict=False)
++    target_resolved = target_path.resolve(strict=False)
++    if not _inside(target_resolved, root_resolved):
++        raise SafeFileReadError(f"{label} resolves outside its allowed root")
++
++    relative = target_path.relative_to(root_path)
++    if not relative.parts:
++        raise SafeFileReadError(f"{label} must name a regular file below its allowed root")
++    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
++    file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
++    descriptors: list[int] = []
++    try:
++        current = os.open(root_path, directory_flags)
++        descriptors.append(current)
++        if not stat.S_ISDIR(os.fstat(current).st_mode):
++            raise SafeFileReadError(f"{label} allowed root is not a directory")
++        for component in relative.parts[:-1]:
++            current = os.open(component, directory_flags, dir_fd=current)
++            descriptors.append(current)
++            if not stat.S_ISDIR(os.fstat(current).st_mode):
++                raise SafeFileReadError(f"{label} parent is not a directory")
++        descriptor = os.open(relative.parts[-1], file_flags, dir_fd=current)
++        descriptors.append(descriptor)
++        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
++            raise SafeFileReadError(f"{label} is not a regular file")
++        chunks: list[bytes] = []
++        while True:
++            chunk = os.read(descriptor, 1024 * 1024)
++            if not chunk:
++                break
++            chunks.append(chunk)
++        return b"".join(chunks), target_path
++    except FileNotFoundError as exc:
++        if missing_ok:
++            return None, target_path
++        raise SafeFileReadError(f"{label} is missing") from exc
++    except SafeFileReadError:
++        raise
++    except OSError as exc:
++        raise SafeFileReadError(f"{label} is unsafe or unreadable: {type(exc).__name__}") from exc
++    finally:
++        for descriptor in reversed(descriptors):
++            os.close(descriptor)
