@@ -19,9 +19,11 @@
 
 ## 当前样板卡
 
+> 阳光电源 07-23 / 07-24 facts 均为 `partial`、Daily Review 均为 `needs_manual_review`。五张 current 卡（持仓主卡、低位观察、风险与跟踪、补仓分析、估值）均为 Lucien/用户显式授权的人工更新；`market_indices`、`sector_context`、`disclosure_status`、`news_policy_context` 保持 TODO/null，Phase C 的 review、current_cards、index、weekly、trading、git 下游权限继续全为 `false`，不生成自动交易指令。
+
 | 标的 | 版本 | 原始数据 | 状态 |
 |------|------|---------|------|
-| 阳光电源 300274 | [sungrow_position_card_v0.1.1.md](sungrow_test/sungrow_position_card_v0.1.1.md) | [300274_2026-07-14_facts.json](data/daily/300274_2026-07-14_facts.json) | 已更新至 2026-07-14 收盘；新低下移至 100.73，盘中出现明显回收并收于 108.29，但止跌、反转和结构修复尚未确认；风险仍高，控制回撤和条件观察优先，不因价格下降自动加仓 |
+| 阳光电源 300274 | [sungrow_position_card_v0.1.1.md](sungrow_test/sungrow_position_card_v0.1.1.md) | [300274_2026-07-24_facts.json](data/daily/300274_2026-07-24_facts.json) | 已更新至 2026-07-24 收盘；07-23 放量强反弹后，07-24 缩量回撤至 113.42、收盘靠近日低，118—120 抛压仍待观察；风险继续高，3 手、成本 181 元，控制回撤优先，不追涨杀跌、当前不补仓 |
 | 阳光电源 短线规则 | [sungrow_short_term_rules_v0.1.md](sungrow_test/sungrow_short_term_rules_v0.1.md) | — | 机动仓管理：三手拆分、卖出/买回触发、禁忌清单 |
 | 阳光电源 复盘记录 | [sungrow_review_2026-06-01.md](sungrow_test/sungrow_review_2026-06-01.md) | — | 高开反抽失败后破位整理，策略从冲 197 止盈切换为反抽处理机动仓 |
 | 阳光电源 复盘记录 | [sungrow_review_2026-06-02.md](sungrow_test/sungrow_review_2026-06-02.md) | — | 缩量弱势整理，恐慌减弱但修复未成立 |
@@ -54,13 +56,15 @@
 | 阳光电源 复盘记录 | [sungrow_review_2026-07-10.md](sungrow/reviews/sungrow_review_2026-07-10.md) | [300274_2026-07-10_facts.json](data/daily/300274_2026-07-10_facts.json) | 收盘 114.79，跌幅 -7.43%，成交额 111.28 亿、换手率 5.92%、量比 1.79；最高 123.80 仍低于前收 124.01，最低 114.00 跌破 07-09 的 118.06，放量下挫后修复链继续下移，风险进一步抬升 |
 | 阳光电源 复盘记录 | [sungrow_review_2026-07-13.md](sungrow/reviews/sungrow_review_2026-07-13.md) | [300274_2026-07-13_facts.json](data/daily/300274_2026-07-13_facts.json) | 收盘 108.00，跌幅约 -5.92%，成交额 81.683688 亿，换手率 4.70%、量比 1.25；开盘 112.54 低于前收 114.79，最高 114.05 仍未回到前收，最低 106.80 进一步下破 07-10 的 114.00，弱势结构继续向下延伸；量能放大没有形成止跌、企稳或趋势修复证据，四类公开上下文仍待补证 |
 | 阳光电源 复盘记录 | [sungrow_review_2026-07-14.md](sungrow/reviews/sungrow_review_2026-07-14.md) | [300274_2026-07-14_facts.json](data/daily/300274_2026-07-14_facts.json) | 盘中新低下移至 100.73，随后回收并收于 108.29，涨幅约 +0.27%，成交额 100.65149576 亿，换手率 6.05%、量比 1.49；盘中急跌后的回收伴随较高活跃度和明显分歧，但止跌与结构修复仍未确认，114.05 / 114.79 / 118.06 等上方观察位仍未收回，四类公开上下文仍待补证 |
-| 阳光电源 风险与跟踪 | [sungrow_risk_and_tracking_v0.1.md](sungrow_test/sungrow_risk_and_tracking_v0.1.md) | — | 07-14 口径：新低下移至 100.73，盘中出现明显回收并收于 108.29，但止跌、反转和结构修复尚未确认；风险仍高，控制回撤和条件观察优先，继续跟踪 100.73 / 106.80 / 108.00 / 108.29 / 109.26 及上方 112.54 / 114.05 / 114.79 / 118.06 |
-| 阳光电源 估值与安全边际 | [sungrow_valuation_v0.1.md](sungrow_test/sungrow_valuation_v0.1.md) | — | 07-14 口径：收盘价由 07-10 的 114.79 下移至 108.29，盘中新低到 100.73；价格位置继续下移不等于估值底或安全边际确认，日内回收不能替代基本面、趋势、资金面、板块和估值证据 |
+| 阳光电源 复盘记录 | [sungrow_review_2026-07-23.md](sungrow/reviews/sungrow_review_2026-07-23.md) | [300274_2026-07-23_facts.json](data/daily/300274_2026-07-23_facts.json) | 收盘 117.79、最高 118.27、约 +7.13%，成交额 107.19171879 亿、换手率 5.86%、量比 1.36；放量强反弹和高位收盘，但单日上涨不足以确认完整趋势反转 |
+| 阳光电源 复盘记录 | [sungrow_review_2026-07-24.md](sungrow/reviews/sungrow_review_2026-07-24.md) | [300274_2026-07-24_facts.json](data/daily/300274_2026-07-24_facts.json) | 开盘 116.13、最高 120.45、最低 113.13、收盘 113.42、约 -3.71%，成交额 63.84702262 亿、换手率 3.47%、量比 0.74；强反弹后的缩量回撤，收盘靠近日低，118—120 抛压待观察 |
+| 阳光电源 风险与跟踪 | [sungrow_risk_and_tracking_v0.1.md](sungrow_test/sungrow_risk_and_tracking_v0.1.md) | — | 07-24 口径：高风险；07-23 强反弹未形成完整趋势反转确认，07-24 上探 120.45 后回落，收盘靠近日低；观察 113.13 / 109.95 / 108.50 与 114.05 / 117.79 / 118.27 / 120.45 |
+| 阳光电源 估值与安全边际 | [sungrow_valuation_v0.1.md](sungrow_test/sungrow_valuation_v0.1.md) | — | 07-24 口径：最新价 113.42，相对 181 元成本仍处较低位置；背景资料不完整，不新增估值结论、目标价或安全边际数字 |
 | 阳光电源 同业对比 | [sungrow_peer_comparison_v0.1.md](sungrow_test/sungrow_peer_comparison_v0.1.md) | — | 可比公司框架（固德威/德业/锦浪/科华/上能/华为数字能源）、比较维度、待补数据清单 |
 | 阳光电源 行业与竞争格局 | [sungrow_industry_competition_v0.1.md](sungrow_test/sungrow_industry_competition_v0.1.md) | — | 储能/逆变器行业、海外订单、AIDC 新业务、新旧催化分类、竞争格局 |
-| 阳光电源 低位观察与补仓条件 | [sungrow_low_zone_observation_v0.1.md](sungrow_test/sungrow_low_zone_observation_v0.1.md) | — | 07-14 口径：新低下移至 100.73，盘中出现明显回收并收于 108.29，但止跌、反转和结构修复尚未确认；主矛盾是能否避免再次刷新 100.73，并维持 106.80 / 108.00 / 108.29 上方，再逐步收回更高位置 |
+| 阳光电源 低位观察与补仓条件 | [sungrow_low_zone_observation_v0.1.md](sungrow_test/sungrow_low_zone_observation_v0.1.md) | — | 07-24 口径：近端仅观察 113.13 / 109.95 / 108.50；更低历史区域保留但非补仓触发；当前无补仓授权 |
 | 阳光电源 阶段总结 | [sungrow_phase_summary_2026-06-01_to_2026-06-05.md](sungrow_test/sungrow_phase_summary_2026-06-01_to_2026-06-05.md) | — | 06-01 至 06-05 连续破位走势回顾、消息面/资金面总结、阶段学习与当前策略 |
-| 阳光电源 加仓节点分析 | [sungrow_add_position_analysis_v0.1.md](sungrow_test/sungrow_add_position_analysis_v0.1.md) | — | 07-14 口径：新低下移至 100.73，盘中出现明显回收并收于 108.29，但止跌、反转和结构修复尚未确认；当前仍不具备成熟加仓条件，不能因新低、低价或成本摊薄动机前置加仓 |
+| 阳光电源 加仓节点分析 | [sungrow_add_position_analysis_v0.1.md](sungrow_test/sungrow_add_position_analysis_v0.1.md) | — | 07-24 口径：当前结论不补仓；不因 07-23 大涨追入，也不因 07-24 回落机械抄底；任何价位均非自动触发条件 |
 
 ---
 
