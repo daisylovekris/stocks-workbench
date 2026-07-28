@@ -1,0 +1,3 @@
+# Canonical package algorithm r11
+
+`bundle_root` is this r11 directory. Enumerate every regular review-material file beneath it except `review_bundle_manifest.json` and `file_sha256_manifest.md` (self-referential identity metadata). For each, use the POSIX bundle-relative path, exact byte length and SHA-256. Sort entries by path; compact UTF-8 canonical JSON is `{"files":[...]}` with `sort_keys=true` and `separators=(',', ':')`; SHA-256 is `package_sha256`. `review_bundle_manifest.json` records that exact ordered list, base head and algorithm; its raw SHA is `review_bundle_manifest_sha256`. `file_sha256_manifest.md` expands the same list; its raw SHA is `file_sha256_manifest_sha256`. Rebuild from source files only; no old package is read.

@@ -1,0 +1,199 @@
+{
+  "artifact_type": "facts_review",
+  "candidate_sha256": "ec0c7dcbd66b10739b9270b34e5eb32fad015e51f82017060443a284097abd8b",
+  "confirmed_fields": [
+    "quote.open",
+    "quote.high",
+    "quote.low",
+    "quote.close",
+    "quote.prev_close",
+    "quote.pct_change",
+    "quote.amount",
+    "quote.turnover_rate",
+    "volume_ratio"
+  ],
+  "downstream_permissions": {
+    "current_cards": false,
+    "git": false,
+    "index": false,
+    "review": false,
+    "trading": false,
+    "weekly": false
+  },
+  "evidence_summary": {
+    "candidate_sha256": "ec0c7dcbd66b10739b9270b34e5eb32fad015e51f82017060443a284097abd8b",
+    "official_bytes_equal_candidate": false,
+    "official_bytes_sha256": "c5cf1efae2bcaacd586117ce413e3f374a54912fda5d0c81a5a5f90fad3eab27",
+    "official_identity_error": null,
+    "official_parse_error": null,
+    "official_post_write_error": null,
+    "runner_manifest_error": null,
+    "runner_manifest_sha256": "adf11ffabbde4d5c6afd90e8e0d11ecc924f7dcc680aca8e9c8b32e3d707bf3d",
+    "runner_official_sha256_after": "c5cf1efae2bcaacd586117ce413e3f374a54912fda5d0c81a5a5f90fad3eab27",
+    "runner_official_validator_after": {
+      "status": "passed"
+    },
+    "semantic_comparison": {
+      "candidate_raw_sha256": "ec0c7dcbd66b10739b9270b34e5eb32fad015e51f82017060443a284097abd8b",
+      "candidate_semantic_sha256": "25c510c0b0cfba34f35f11e7c7a726f18ffbf70c66391dbc914ba65da440f8f7",
+      "comparison_mode": "approved_timestamp_paths_v1",
+      "excluded_json_paths": [
+        "generated_at",
+        "quote_verification.fetched_at",
+        "run.fetched_at",
+        "volume_ratio.five_day_volume_check.fetched_at",
+        "volume_ratio.snapshot_ohlc_check.fetched_at",
+        "volume_ratio.verification.fetched_at"
+      ],
+      "excluded_values": {
+        "all_paths_present": true,
+        "all_strings": true,
+        "all_valid_iso_datetime": true,
+        "candidate_types": {
+          "generated_at": "str",
+          "quote_verification.fetched_at": "str",
+          "run.fetched_at": "str",
+          "volume_ratio.five_day_volume_check.fetched_at": "str",
+          "volume_ratio.snapshot_ohlc_check.fetched_at": "str",
+          "volume_ratio.verification.fetched_at": "str"
+        },
+        "official_types": {
+          "generated_at": "str",
+          "quote_verification.fetched_at": "str",
+          "run.fetched_at": "str",
+          "volume_ratio.five_day_volume_check.fetched_at": "str",
+          "volume_ratio.snapshot_ohlc_check.fetched_at": "str",
+          "volume_ratio.verification.fetched_at": "str"
+        }
+      },
+      "official_changed": false,
+      "official_raw_sha256": "c5cf1efae2bcaacd586117ce413e3f374a54912fda5d0c81a5a5f90fad3eab27",
+      "official_semantic_sha256": "25c510c0b0cfba34f35f11e7c7a726f18ffbf70c66391dbc914ba65da440f8f7",
+      "semantic_equal": true
+    }
+  },
+  "facts_status": "partial",
+  "generated_at": "2026-07-23T22:33:42.503923+08:00",
+  "generator_version": "phase_c_v0.2",
+  "incident_reason_code": null,
+  "missing": {
+    "disclosure_status": null,
+    "market_indices": null,
+    "news_policy_context": null,
+    "sector_context": null
+  },
+  "mode": "today_after_close",
+  "needs_manual_check": {
+    "disclosure_status": true,
+    "market_indices": true,
+    "news_policy_context": true,
+    "sector_context": true,
+    "volume_ratio": false
+  },
+  "official_changed": false,
+  "official_path": "/Users/wongdaisy/Mimo-Lab/stocks/data/daily/300274_2026-07-23_facts.json",
+  "official_sha256": "c5cf1efae2bcaacd586117ce413e3f374a54912fda5d0c81a5a5f90fad3eab27",
+  "official_sha256_before": "c5cf1efae2bcaacd586117ce413e3f374a54912fda5d0c81a5a5f90fad3eab27",
+  "official_sha_match": true,
+  "partial_write_policy": {
+    "eligible": true,
+    "missing_keys": [
+      "disclosure_status",
+      "market_indices",
+      "news_policy_context",
+      "sector_context"
+    ],
+    "needs_manual_review": true,
+    "reason_code": "eligible_partial_official"
+  },
+  "postcheck_status": "passed",
+  "provenance": {
+    "authoritative_inputs": [
+      "official_locked_bytes",
+      "runner_manifest_schema_valid",
+      "facts_validator_live"
+    ],
+    "invalid_prior_manifest": null,
+    "official_sha_rechecked_before_commit": true,
+    "rebuilt_from_official": false,
+    "runner_manifest_invalid": false,
+    "runner_manifest_used": true
+  },
+  "review_id": "rev_300274_2026-07-23_c5cf1efae2bcaacd",
+  "review_state": "needs_manual_review",
+  "run_id": "22972611-db15-4b55-8eb6-a2f390ce5f80",
+  "runner_manifest_path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-23/22972611-db15-4b55-8eb6-a2f390ce5f80/manifest.json",
+  "runner_manifest_sha256": "adf11ffabbde4d5c6afd90e8e0d11ecc924f7dcc680aca8e9c8b32e3d707bf3d",
+  "schema_version": "review_manifest_v0.2_phase_c",
+  "source_refs": [
+    {
+      "field": "quote_verification.source",
+      "value": "tencent"
+    },
+    {
+      "field": "quote_verification.source_date",
+      "value": "2026-07-23"
+    },
+    {
+      "field": "volume_ratio.cross_check.source",
+      "value": "sohu_five_day_volume_derived"
+    },
+    {
+      "field": "volume_ratio.cross_check.source_date",
+      "value": "2026-07-23"
+    },
+    {
+      "field": "volume_ratio.five_day_volume_check.source",
+      "value": "sohu_history"
+    },
+    {
+      "field": "volume_ratio.snapshot_ohlc_check.source_date",
+      "value": "2026-07-23"
+    },
+    {
+      "field": "volume_ratio.source",
+      "value": "tencent_qt_direct_index_49+sohu_five_day_volume"
+    },
+    {
+      "field": "volume_ratio.verification.method",
+      "value": "same_day_snapshot_plus_sohu_five_day_cross_check"
+    },
+    {
+      "field": "volume_ratio.verification.source",
+      "value": "tencent_qt_direct_index_49+sohu_five_day_volume"
+    },
+    {
+      "field": "volume_ratio.verification.source_date",
+      "value": "2026-07-23"
+    }
+  ],
+  "symbol": "300274",
+  "trade_date": "2026-07-23",
+  "unresolved_fields": [
+    {
+      "field": "disclosure_status",
+      "source": "needs_manual_check",
+      "value": true
+    },
+    {
+      "field": "market_indices",
+      "source": "needs_manual_check",
+      "value": true
+    },
+    {
+      "field": "news_policy_context",
+      "source": "needs_manual_check",
+      "value": true
+    },
+    {
+      "field": "sector_context",
+      "source": "needs_manual_check",
+      "value": true
+    }
+  ],
+  "validator_result": {
+    "status": "passed"
+  },
+  "write_action": "semantic_noop",
+  "write_reason_code": "official_semantically_identical"
+}

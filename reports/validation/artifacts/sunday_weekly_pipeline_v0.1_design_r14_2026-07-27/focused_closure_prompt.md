@@ -1,0 +1,3 @@
+# r14 focused closure prompt
+
+Review all r14 evidence cumulatively. Recompute package and golden identities. Explicitly inspect `r14_tuple_static_validation.json` and require empty `main_minus_matrix_tuples`, `matrix_minus_main_tuples`, `mapping_tuple_mismatches`, and `mapping_permission_mismatches`. For every state contract, verify the four-tuple exactly: `state / outcome / reason_code / permissions`. Confirm input-set schema and contract same-FD identities, registered Daily Review resolver, actual Phase B calls including 07-23 `semantic_noop`, Phase C ledger naming, bare-number rejection, zero-trading state, and false trading permissions. Do not inspect r13 or older external materials.

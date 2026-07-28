@@ -1,0 +1,334 @@
+实验编号：pi-20260729-011452-17167
+该编号仅用于成本测量，不改变审查范围、证据标准或输出判决。
+
+二、Fable 审查任务
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+你是 Sunday Weekly Pipeline v0.1 的最终独立外部审稿人。
+
+只审查下列 r14 密封母包：
+
+reports/validation/artifacts/
+sunday_weekly_pipeline_v0.1_design_r14_2026-07-27/
+
+先读取：
+
+focused_closure_prompt.md
+
+并严格遵守其中的审查边界。
+
+不得依赖 r13 或更早外部包，不得读取未密封的历史设计材料来补足 r14。若 r14 自身缺少必要证据，应按 finding 报告，不得从包外寻找替代材料。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+三、身份基准
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+预期身份：
+
+package SHA-256:
+e2301e00fb97a1b1383ba13ec1400693c265984370eb6c74ae0c0eccc6522f6d
+
+review manifest SHA-256:
+855d78da78fd373156e76a2394c00532c6bb557521f22d84637a0bdd3d741df6
+
+file manifest SHA-256:
+24c1fc60f8a71710f3d98e0aa6039b56039124af229a791ccc68dd59af0a7911
+
+golden input-set SHA-256:
+9af2c2dbe1b6556bcf4c2fc332d45f3a31131f1933f2d75963c6fa505af17293
+
+golden candidate SHA-256:
+ae5d74c61ab6cda5e5adf44db33607f314d21873a585fb5564518aaff5018b03
+
+必须依据：
+
+- canonical_package_algorithm.md
+- review_bundle_manifest.json
+- file_sha256_manifest.md
+
+从零复算包身份。
+
+任何身份不一致均为 P1，禁止继续给出 GREEN_LIGHT。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+四、省 token 的阅读顺序
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+第一组：入口与封装身份
+
+- focused_closure_prompt.md
+- canonical_package_algorithm.md
+- review_bundle_manifest.json
+- file_sha256_manifest.md
+- snapshots/design_validation_body.md
+
+第二组：最终权威契约
+
+- snapshots/rules/sunday_weekly_pipeline_v0.1.md
+- snapshots/rules/sunday_weekly_pipeline_semantic_config_v0.1.json
+- snapshots/rules/sunday_weekly_candidate_v0.1.schema.json
+- snapshots/rules/sunday_weekly_candidate_semantics_v0.1.md
+- snapshots/rules/sunday_weekly_input_set_v0.1.schema.json
+- snapshots/rules/sunday_weekly_input_set_v0.1.md
+
+第三组：closure 证据
+
+- r14_tuple_static_validation.json
+- cumulative_status_matrix.md
+- cumulative_finding_mapping.md
+- cumulative_test_matrix.md
+- module_map.md
+
+第四组：黄金与运行证据
+
+- golden_candidate_300274_2026-07-26.json
+- golden_input_set_300274_2026-07-20_24.json
+- golden_metrics_fixture.md
+- phase_b_actual_validator_execution.json
+- phase_c_authority_derivation_ledger.json
+- r13_unresolved_encoding_validation.json
+- ajv_execution.json
+
+仅在核验某项身份或 finding 时，再定向读取对应 snapshot。
+禁止无目的遍历全部大文件。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+五、必须独立核验
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+A. 包完整性
+
+- manifest 中每项 path、size、SHA 与真实文件一致
+- 无 missing file
+- 无 extra sealed file
+- package SHA 可按密封算法复建
+- review manifest 与 file manifest raw SHA 正确
+
+B. 黄金身份
+
+- candidate raw bytes 无 BOM、末尾 LF 或额外空白
+- candidate raw bytes 等于 canonical reserialization bytes
+- input-set canonical SHA 正确
+- golden candidate 引用的 input_set_sha256 正确
+- schema、semantics、input-set schema、input-set contract 的 raw SHA 与 semantic config 匹配
+
+C. 状态四元组
+
+必须读取 r14_tuple_static_validation.json，核验每项：
+
+state / outcome / reason_code / permissions
+
+必须确认：
+
+- main_minus_matrix_tuples 为空
+- matrix_minus_main_tuples 为空
+- mapping_tuple_mismatches 为空
+- mapping_permission_mismatches 为空
+- mapping_test_ids_missing 为空
+- test_ids_unique 为 true
+
+重点核验：
+
+candidate_ready_for_human_review
+/ candidate_created
+/ all_gates_passed
+/ human_review only
+
+already_completed
+/ no_op
+/ valid_matching_completion
+/ inherit original candidate; trading false
+
+already_completed
+/ no_op
+/ index_recovered
+/ inherit original candidate; trading false
+
+no_candidate_for_window
+/ no_candidate
+/ no_trading_days
+/ all false
+
+D. 安全边界
+
+确认机器永远无权：
+
+- 写正式 weekly
+- 写 current 卡
+- 写仓库 index
+- 执行 Git 操作
+- 给出交易指令
+- 开启 trading permission
+- 自动填充六个人工判断槽位
+
+确认所有交易相关 permission 恒为 false。
+
+E. Phase B 真实证据
+
+核验 phase_b_actual_validator_execution.json：
+
+- 明确记录 actual validator execution
+- 函数为 phase_b_completion.validate_completion_manifest
+- code SHA 与密封代码一致
+- driver、invocation、process exit、stdout/stderr、direct return 均有清晰语义
+- 2026-07-23 direct_function_return 精确为 semantic_noop
+- Phase B semantic_noop 仅属于每日输入证据
+- SWP completion reason 中不存在 semantic_noop
+
+F. Phase C 证据
+
+核验 phase_c_authority_derivation_ledger.json：
+
+- 明确标注 deterministic authority derivation
+- 没有冒充 actual validator execution
+- 每日 authority_count 恰为 1
+- index entry、manifest SHA、official SHA、symbol、trade_date 一致
+- accepted review state 合法
+- downstream permissions 全关闭
+
+G. 输入身份与 resolver
+
+- input-set contract 本身有 raw SHA 身份
+- Daily Review resolver 由 semantic config 注册
+- 300274 精确映射到：
+  sungrow/reviews/sungrow_review_{trade_date}.md
+- 禁止猜目录
+- 未登记 symbol fail-closed
+- Phase C index、snapshot path、diagnostic、validator output 不进入 input set
+
+H. 边界案例
+
+- 合法零交易日周进入：
+  no_candidate_for_window / no_candidate / no_trading_days / all false
+- 它不得被归为 calendar_window_invalid
+- unresolved value 出现裸 JSON number 时 fail-closed
+- 不得偷偷把数字改成字符串
+- decimal schema 准入与拒绝样例同 AJV 证据一致
+- historical run 不得使用未来数据
+
+I. 累计 finding closure
+
+逐项核验：
+
+- 原始 Fable findings
+- Lucien r2 至 r14 findings
+
+每项必须拥有：
+
+- 唯一 finding ID
+- severity
+- 最终契约位置
+- state
+- outcome
+- reason_code
+- permissions
+- evidence
+- exact test ID
+
+禁止用范围 ID 或笼统文字代替逐项 closure。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+六、Finding 标准
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+只报告真实、可复现且影响冻结或实现唯一性的 finding。
+
+P1：
+- 包身份错误
+- 数据身份错误
+- 会造成越权写入、交易权限开启、历史数据污染
+- 无法安全实现的核心架构错误
+
+P2：
+- 两位实现者可能合法地产生不同语义
+- 状态、权限、身份或并发契约仍有缺口
+- 密封证据无法支持其声明
+
+P3：
+- 不影响核心正确性的归档、措辞或导航问题
+
+每项 finding 必须包含：
+
+- finding_id
+- severity
+- evidence path
+- 精确字段、行或 JSON pointer
+- failure scenario
+- consequence
+- 最小修复建议
+
+不得为显得严格而虚构 finding。
+没有 finding 时明确写 NONE。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+七、输出格式
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Fable Final Review — SWP v0.1 r14
+
+## 1. Runtime identity
+
+- actual model:
+- backend:
+- provider:
+- identity confidence:
+
+无法观测则写 UNKNOWN，不得推断。
+
+## 2. Scope and recomputed identities
+
+逐项列出 expected / actual / verdict。
+
+## 3. Independent verification
+
+按 A 至 I 报告 PASS / FAIL / PARTIAL，并给出证据。
+
+## 4. Findings
+
+### P1
+逐项或 NONE
+
+### P2
+逐项或 NONE
+
+### P3
+逐项或 NONE
+
+## 5. Verdict matrix
+
+PACKAGE_INTEGRITY =
+GOLDEN_IDENTITY =
+STATE_TUPLE_CLOSURE =
+INPUT_IDENTITY_CLOSURE =
+PHASE_B_EVIDENCE =
+PHASE_C_EVIDENCE =
+NO_FUTURE_DATA =
+NO_TRADING_AUTHORITY =
+FULL_DESIGN_CLOSURE =
+SOL_IMPLEMENTATION_READY =
+
+P1_COUNT =
+P2_COUNT =
+P3_COUNT =
+
+## 6. Final decision
+
+只允许下列结果之一：
+
+GREEN_LIGHT
+CONDITIONAL_GREEN_LIGHT
+NO_GO
+
+仅当：
+
+- 五枚身份全部通过
+- P1=0
+- P2=0
+- 所有交易权限关闭
+- FULL_DESIGN_CLOSURE=PASS
+
+才允许输出 GREEN_LIGHT。
+
+不要修改任何文件。
+不要生成实现代码。
+不要暂存、commit 或 push。

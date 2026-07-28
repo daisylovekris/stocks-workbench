@@ -1,0 +1,25 @@
+{
+  "ab_run_id": "bare-recovered-20260729-0154",
+  "mode": "bare",
+  "actual_model": "anthropic/claude-fable-5",
+  "provider": "ZenMux",
+  "upstream_provider_observed": "Google Vertex",
+  "backend": "Claude Code bare via ZenMux",
+  "observed_log_window_local": "2026-07-29 01:54–01:55",
+  "model_completion_status": "completed",
+  "local_capture_status": "failed",
+  "recovery_source": "ZenMux web logs copied to clipboard",
+  "valid_for_quality_comparison": true,
+  "valid_for_cost_comparison": true,
+  "valid_for_runner_reliability": false,
+  "authoritative_cost_usd": 1.581959,
+  "cost_source": "ZenMux key delta: 1.600254 - 0.018295",
+  "final_decision": "GREEN_LIGHT",
+  "report_sha256": "27edebeb3db5dd6aa1419fb3819aca49e29966152e4a673481215576713efc34",
+  "known_report_issues": [
+    "manifest file count reported as 33; actual sealed count is 82",
+    "finding mapping count reported as 72; actual count is 71",
+    "test ID range reported through T50; actual range ends at T49",
+    "provider reported as Anthropic although runtime provider was not independently observable"
+  ]
+}

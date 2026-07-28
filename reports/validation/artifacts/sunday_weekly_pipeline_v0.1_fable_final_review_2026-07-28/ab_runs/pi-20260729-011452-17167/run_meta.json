@@ -1,0 +1,49 @@
+{
+  "ab_run_id": "pi-20260729-011452-17167",
+  "mode": "pi",
+  "actual_model": "anthropic/claude-fable-5",
+  "backend": "anthropic-messages via Pi guarded tools",
+  "provider": "ZenMux",
+  "command_or_invocation": "pi --mode json --provider zenmux-fable --model anthropic/claude-fable-5 --thinking low --guarded-review-tools",
+  "started_at": "2026-07-28T17:14:52Z",
+  "finished_at": "2026-07-28T17:16:33Z",
+  "duration_seconds": 101,
+  "engine_exit_code": 0,
+  "engine_error": null,
+  "token_usage": {
+    "input": 18,
+    "output": 4995,
+    "cacheRead": 186039,
+    "cacheWrite": 45440,
+    "totalTokens": 236492,
+    "reasoning": 485,
+    "cost": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "total": 0
+    }
+  },
+  "cost": {
+    "input": 0,
+    "output": 0,
+    "cacheRead": 0,
+    "cacheWrite": 0,
+    "total": 0
+  },
+  "cost_source": "pi_local_model_metadata",
+  "authoritative_cun_cost": null,
+  "before_git_status_sha256": "00fb75e7bc0ef10648980d200c1734b0810ea7bbd757f44a6eb6aa8b04a403bc",
+  "after_git_status_sha256": "00fb75e7bc0ef10648980d200c1734b0810ea7bbd757f44a6eb6aa8b04a403bc",
+  "git_status_unchanged": true,
+  "original_branch": "workbench/mainline-2026-07",
+  "repo_head": "b409f40ab2f4334e2f1205acb56b5a1628d38e9d",
+  "prompt_sha256": "b11ae69336a19b6b42cc8fa1acd50029e3c8e8bc63bd8b22865dbb0504144986",
+  "package_sha256": null,
+  "review_manifest_sha256": "855d78da78fd373156e76a2394c00532c6bb557521f22d84637a0bdd3d741df6",
+  "file_manifest_sha256": "24c1fc60f8a71710f3d98e0aa6039b56039124af229a791ccc68dd59af0a7911",
+  "golden_input_set_sha256": null,
+  "golden_input_set_raw_sha256": "9af2c2dbe1b6556bcf4c2fc332d45f3a31131f1933f2d75963c6fa505af17293",
+  "golden_candidate_sha256": "ae5d74c61ab6cda5e5adf44db33607f314d21873a585fb5564518aaff5018b03"
+}

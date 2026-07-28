@@ -1,0 +1,89 @@
+{
+  "alerts": [],
+  "calendar": {
+    "coverage_end": "2026-07-31",
+    "coverage_start": "2026-07-01",
+    "path": "/Users/wongdaisy/Mimo-Lab/stocks/config/a_share_trading_calendar_2026.json",
+    "sha256": "fd693d1e62b46408e7fbff3049e06cd368e5026279398d0c5e5344e3472add5e",
+    "source": "sse_szse_official_2026_holiday_notices_verified_2026-07-22",
+    "version": "2026-07-phase-a-2026-07-15-omission-fix-v1"
+  },
+  "candidate_path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-22/fcc609d0-04b1-47e2-b1c5-d8f9ab03fef0/candidate.json",
+  "candidate_sha256": "795a4e77a84fcdebfd5f2f52b088728d86c20833c0d33318c3687298e30ab30a",
+  "dry_run": false,
+  "duration_ms": 1413,
+  "exception": null,
+  "finished_at": "2026-07-22T20:40:36.675824+08:00",
+  "generator": {
+    "command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "-B",
+      "/Users/wongdaisy/Mimo-Lab/stocks/tools/generate_daily_facts.py",
+      "--symbol",
+      "300274",
+      "--date",
+      "2026-07-22",
+      "--output",
+      "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-22/fcc609d0-04b1-47e2-b1c5-d8f9ab03fef0/candidate.json",
+      "--dry-run",
+      "--emit-runner-marker",
+      "--timeout",
+      "15.0"
+    ],
+    "exit_code": 2,
+    "protocol_reason": null,
+    "result_status": "partial",
+    "stderr_path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-22/fcc609d0-04b1-47e2-b1c5-d8f9ab03fef0/generator_stderr.txt",
+    "stdout_path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-22/fcc609d0-04b1-47e2-b1c5-d8f9ab03fef0/generator_stdout.txt"
+  },
+  "last_stage": "official",
+  "manifest_path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-22/fcc609d0-04b1-47e2-b1c5-d8f9ab03fef0/manifest.json",
+  "mode": "today_after_close",
+  "needs_manual_review": true,
+  "now": "2026-07-22T20:40:35.262657+08:00",
+  "official_bytes_equal_candidate": true,
+  "official_changed": true,
+  "official_exists_before": false,
+  "official_path": "/Users/wongdaisy/Mimo-Lab/stocks/data/daily/300274_2026-07-22_facts.json",
+  "official_post_write_error": null,
+  "official_sha256_after": "795a4e77a84fcdebfd5f2f52b088728d86c20833c0d33318c3687298e30ab30a",
+  "official_sha256_before": null,
+  "official_validator_after": {
+    "status": "passed"
+  },
+  "official_validator_before": {
+    "status": "passed"
+  },
+  "outcome": "partial",
+  "partial_write_policy": {
+    "eligible": true,
+    "missing_keys": [
+      "disclosure_status",
+      "market_indices",
+      "news_policy_context",
+      "sector_context"
+    ],
+    "needs_manual_review": true,
+    "reason_code": "eligible_partial_official"
+  },
+  "pid": 6490,
+  "previous_run_id": "18575512-7d9b-4e78-91cf-860b25554daf",
+  "reason": null,
+  "reason_code": "official_written_partial",
+  "retry_count": 0,
+  "run_id": "fcc609d0-04b1-47e2-b1c5-d8f9ab03fef0",
+  "runtime_dir": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime",
+  "scan_diagnostics": [],
+  "scheduled_cutoff": "15:20",
+  "schema_version": "runner_manifest_v0.2_phase_b",
+  "stage": "finished",
+  "started_at": "2026-07-22T20:40:35.262496+08:00",
+  "symbol": "300274",
+  "target_date": "2026-07-22",
+  "timezone": "Asia/Shanghai",
+  "validator": {
+    "status": "passed"
+  },
+  "write_action": "created",
+  "write_official": true
+}

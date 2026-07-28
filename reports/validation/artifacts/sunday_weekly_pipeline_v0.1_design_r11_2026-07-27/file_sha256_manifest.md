@@ -1,0 +1,55 @@
+# File SHA-256 Manifest r11
+
+All paths are relative to bundle_root.
+
+| Path | Bytes | SHA-256 |
+|---|---:|---|
+| candidate_semantics_identity.md | 521 | 0c91de4b400d47312942cc6eb83bb34fa35fc61d80837f8c3a9a15041d656eb6 |
+| canonical_package_algorithm.md | 749 | 88498fcdda842ba9c1e5cb2eef762c03584c92782c580482dc76930d21035cc2 |
+| cumulative_finding_mapping.md | 5045 | 58948a08d6f6f49807fc862dd8bdeffc1572e1980de025bfbd485fbc13e295b5 |
+| cumulative_status_matrix.md | 1751 | 3b87592092f72dc2d52f0e6b6b1c57f0b8886e3f32fff21219a205c8a4ad6071 |
+| cumulative_test_matrix.md | 2396 | bb57c046c1c686a53aff59621405a8c1ffc1bf9a32ee6a48aa86df7cd8006aaa |
+| decimal_schema_validation.md | 704 | 77828d2097e8d34e334f64851686685f1256fceb4c533e2e8b4a3afc39e81a08 |
+| focused_closure_prompt.md | 569 | f5b1c3fdb9744606dec0285ce1c1e2bd64322c4fe5f458b5f7620f13260a0c3d |
+| golden_candidate_300274_2026-07-26.json | 3129 | 15b8eb126e95a5e81365bcb65ff1c65d894a05365cef47db158caf8d37859b6e |
+| golden_input_set_300274_2026-07-20_24.json | 4577 | 1a0121d51dbf0e5652bd6bfc08368dcc26747a819348de496a021333cec9a9c1 |
+| golden_input_set_300274_2026-07-20_24.md | 630 | 1c235ccba2c03b4bffb347dc0a1d3a169f294d597af8da0cbe72c5f7d66c3837 |
+| golden_metrics_fixture.md | 1058 | a4e9e4bd6c310870dfd6c062d8417d6b6b25e6818ed856b807b96005a5a29ba9 |
+| golden_unresolved_fields_300274_2026-07-20_24.json | 1962 | b560e535389278f6e7de1c842975e02e84b4aecefcf6a1c1e69d965f395c272f |
+| module_map.md | 1397 | dc12e08a203c9c0dc41b0c22346b5b8e72fe63404bb0bb33ef2a9646e128de44 |
+| snapshots/design_validation_body.md | 557 | 22ad7b281dc8990bc3271410da814fd38ffc482d0b127aeee976d58733b198f3 |
+| snapshots/fable_raw.md | 11541 | 4cafde436432a20e843c0e39b981beda938a956341c40e17a9eb9743d684fd79 |
+| snapshots/golden/300274_2026-07-20_facts.json | 4430 | 4ef128d6314383f40263b6cba137ae10a9e7fc5d3353ef109db666e6978b1460 |
+| snapshots/golden/300274_2026-07-21_facts.json | 4428 | d5049f43f612744558c5e572938e49c60650657991c339627cade2979b3fc071 |
+| snapshots/golden/300274_2026-07-22_facts.json | 4642 | 795a4e77a84fcdebfd5f2f52b088728d86c20833c0d33318c3687298e30ab30a |
+| snapshots/golden/300274_2026-07-23_facts.json | 4641 | c5cf1efae2bcaacd586117ce413e3f374a54912fda5d0c81a5a5f90fad3eab27 |
+| snapshots/golden/300274_2026-07-24_facts.json | 4652 | 09b30acc84ae65715859101880ba9eb4ac1c5bf14afa27770323f0e806debff7 |
+| snapshots/rules/sunday_weekly_candidate_semantics_v0.1.md | 2920 | 300f08340889676d7d6bac92dc29cd1b0ff11ed742ad8d0e107da9e19f1cd086 |
+| snapshots/rules/sunday_weekly_candidate_v0.1.schema.json | 3515 | b4a05b9418f951b80ab3d55c6fcd4ab068fef43bb2b9e8691a32029c1c87b0b3 |
+| snapshots/rules/sunday_weekly_pipeline_semantic_config_v0.1.json | 1458 | 4c00ed89d04efa457dae306d0a1db3ae0546a97f32342876cb622c1017b17996 |
+| snapshots/rules/sunday_weekly_pipeline_v0.1.md | 23213 | f86b99c0cde0c4d6e4fc77dcb8d7e151d2679acd3dfb124ffb19052eb222899a |
+| snapshots/runtime/calendar/a_share_trading_calendar_2026.json | 707 | fd693d1e62b46408e7fbff3049e06cd368e5026279398d0c5e5344e3472add5e |
+| snapshots/runtime/daily_review/2026-07-20.review_summary.md | 1552 | d990690704a91771e92f69ba616bede8245f8d8ae96c1ae57f40c46daff8b969 |
+| snapshots/runtime/daily_review/2026-07-21.review_summary.md | 1552 | 31651740be163aca7ab73925691a298fc1da2015b183141390763c3246826397 |
+| snapshots/runtime/daily_review/2026-07-22.review_summary.md | 1552 | b0ffdfdc38e009d99509ee695b6bf72697ad2beb6b63130aa62b7dba0db895d8 |
+| snapshots/runtime/daily_review/2026-07-23.review_summary.md | 1565 | 13fd1c55e753fac752ffd8335e9cf1d67848f058f8d3c780de247c8295b9f725 |
+| snapshots/runtime/daily_review/2026-07-24.review_summary.md | 1552 | e8cff6fbd27bc959cbcc831708754cc7364dfbc2e3022bb2844dc01141c11345 |
+| snapshots/runtime/phase_b_manifest/2026-07-20.runner_manifest.json | 3495 | 853886f6632857231374d156c71ac3f6c6fc58516af7c75a62d50371b5521387 |
+| snapshots/runtime/phase_b_manifest/2026-07-21.runner_manifest.json | 3495 | 7773ec4e07a59ae1ee733420ead083ded48d988fa6c6a186e9811ca444477478 |
+| snapshots/runtime/phase_b_manifest/2026-07-22.runner_manifest.json | 3433 | 4496ecf4f8596f6bc0fb85b961bbb8dc435ad6cedd3dbb2d392cd15731b4b34c |
+| snapshots/runtime/phase_b_manifest/2026-07-23.runner_manifest.json | 5107 | adf11ffabbde4d5c6afd90e8e0d11ecc924f7dcc680aca8e9c8b32e3d707bf3d |
+| snapshots/runtime/phase_b_manifest/2026-07-24.runner_manifest.json | 4069 | 1892bfcb7fd989ef122a8e9f4aa24b706f4363886d9ba281c1f5ed340ae47b78 |
+| snapshots/runtime/phase_c_index/2026-07-20.review_index.jsonl | 593 | 54306c45b426f56d15c5a769ad1e728e2bab6f14b297756666d804efb28f7722 |
+| snapshots/runtime/phase_c_index/2026-07-21.review_index.jsonl | 593 | 725ae1e4c382c4858840bcb89072348fc453a344bb2486450310718e418c415b |
+| snapshots/runtime/phase_c_index/2026-07-22.review_index.jsonl | 593 | 1af1d4345c77794d49f360acf18ad4c1837f6fd01d27a4ba5c5a2c50872ff0a9 |
+| snapshots/runtime/phase_c_index/2026-07-23.review_index.jsonl | 593 | e2d498694cc14344a91f3157c489e0dfd595e47fc7f15030b6d1d7ef89c916b2 |
+| snapshots/runtime/phase_c_index/2026-07-24.review_index.jsonl | 593 | 49dd452029be7917a6e02bb589ba86b5f92262560b500b9414299b2f686dfb4f |
+| snapshots/runtime/phase_c_manifest/2026-07-20.review_manifest.json | 4918 | cd7a603504be41cee7df1670fed65a09f7fc2b16507cac19f1a0912314790122 |
+| snapshots/runtime/phase_c_manifest/2026-07-21.review_manifest.json | 4918 | 85d0ffe38d2e3e0f56837476ce1e005b2f8677350b9bf234b9146e147b35c671 |
+| snapshots/runtime/phase_c_manifest/2026-07-22.review_manifest.json | 4794 | fce2bcaf88759ef5fc2d00bb793c9fdb401889c6f6e77263a94fcb244c6cf008 |
+| snapshots/runtime/phase_c_manifest/2026-07-23.review_manifest.json | 6541 | d4717c4805acdd4915a6ed2dbcb43af861008f7faa5bf102ebf5c4b46a337677 |
+| snapshots/runtime/phase_c_manifest/2026-07-24.review_manifest.json | 4829 | ea869c02d083ddfa181d9334885ff44d09272298f0b43fb0fb25d0e0965ccaf3 |
+| snapshots/tools/phase_b_completion.py | 15467 | 6628f70ce7cef35eaf8b7884c6fba8c1f2b769ee5e133195973f67dafca4f292 |
+| snapshots/tools/review_manifest.py | 69330 | fa7b6fb47588a9df2561fd6967d5a16db24f6c72e76b40c00cfd9f700ebcd8b7 |
+| snapshots/tools/safe_file_read.py | 3087 | 464f6b3b0cb0e17e96deedf1152201c86cb9070535030824fdfa77b1906689da |
+| validation_dependency_status.md | 309 | 22c2f677b31ff35947dcb293d7d0ca6edfa60f98829b72f881e9a9bcb531a6f0 |

@@ -1,0 +1,162 @@
+{
+  "artifact_type": "facts_review",
+  "candidate_sha256": "09b30acc84ae65715859101880ba9eb4ac1c5bf14afa27770323f0e806debff7",
+  "confirmed_fields": [
+    "quote.open",
+    "quote.high",
+    "quote.low",
+    "quote.close",
+    "quote.prev_close",
+    "quote.pct_change",
+    "quote.amount",
+    "quote.turnover_rate",
+    "volume_ratio"
+  ],
+  "downstream_permissions": {
+    "current_cards": false,
+    "git": false,
+    "index": false,
+    "review": false,
+    "trading": false,
+    "weekly": false
+  },
+  "evidence_summary": {
+    "candidate_sha256": "09b30acc84ae65715859101880ba9eb4ac1c5bf14afa27770323f0e806debff7",
+    "official_bytes_equal_candidate": true,
+    "official_bytes_sha256": "09b30acc84ae65715859101880ba9eb4ac1c5bf14afa27770323f0e806debff7",
+    "official_identity_error": null,
+    "official_parse_error": null,
+    "official_post_write_error": null,
+    "runner_manifest_error": null,
+    "runner_manifest_sha256": "1892bfcb7fd989ef122a8e9f4aa24b706f4363886d9ba281c1f5ed340ae47b78",
+    "runner_official_sha256_after": "09b30acc84ae65715859101880ba9eb4ac1c5bf14afa27770323f0e806debff7",
+    "runner_official_validator_after": {
+      "status": "passed"
+    },
+    "semantic_comparison": null
+  },
+  "facts_status": "partial",
+  "generated_at": "2026-07-26T04:17:32.349765+08:00",
+  "generator_version": "phase_c_v0.2",
+  "incident_reason_code": null,
+  "missing": {
+    "disclosure_status": null,
+    "market_indices": null,
+    "news_policy_context": null,
+    "sector_context": null
+  },
+  "mode": "historical_backfill",
+  "needs_manual_check": {
+    "disclosure_status": true,
+    "market_indices": true,
+    "news_policy_context": true,
+    "sector_context": true,
+    "volume_ratio": false
+  },
+  "official_changed": true,
+  "official_path": "/Users/wongdaisy/Mimo-Lab/stocks/data/daily/300274_2026-07-24_facts.json",
+  "official_sha256": "09b30acc84ae65715859101880ba9eb4ac1c5bf14afa27770323f0e806debff7",
+  "official_sha256_before": null,
+  "official_sha_match": true,
+  "partial_write_policy": {
+    "eligible": true,
+    "missing_keys": [
+      "disclosure_status",
+      "market_indices",
+      "news_policy_context",
+      "sector_context"
+    ],
+    "needs_manual_review": true,
+    "reason_code": "eligible_partial_official"
+  },
+  "postcheck_status": "passed",
+  "provenance": {
+    "authoritative_inputs": [
+      "official_locked_bytes",
+      "runner_manifest_schema_valid",
+      "facts_validator_live"
+    ],
+    "invalid_prior_manifest": null,
+    "official_sha_rechecked_before_commit": true,
+    "rebuilt_from_official": false,
+    "runner_manifest_invalid": false,
+    "runner_manifest_used": true
+  },
+  "review_id": "rev_300274_2026-07-24_09b30acc84ae6571",
+  "review_state": "needs_manual_review",
+  "run_id": "43532eec-41b9-4c9a-8fc6-2dc763c19a84",
+  "runner_manifest_path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-24/43532eec-41b9-4c9a-8fc6-2dc763c19a84/manifest.json",
+  "runner_manifest_sha256": "1892bfcb7fd989ef122a8e9f4aa24b706f4363886d9ba281c1f5ed340ae47b78",
+  "schema_version": "review_manifest_v0.2_phase_c",
+  "source_refs": [
+    {
+      "field": "quote_verification.source",
+      "value": "tencent"
+    },
+    {
+      "field": "quote_verification.source_date",
+      "value": "2026-07-24"
+    },
+    {
+      "field": "volume_ratio.cross_check.source",
+      "value": "sohu_five_day_volume_derived"
+    },
+    {
+      "field": "volume_ratio.cross_check.source_date",
+      "value": "2026-07-24"
+    },
+    {
+      "field": "volume_ratio.five_day_volume_check.source",
+      "value": "sohu_history"
+    },
+    {
+      "field": "volume_ratio.snapshot_ohlc_check.source_date",
+      "value": "2026-07-24"
+    },
+    {
+      "field": "volume_ratio.source",
+      "value": "tencent_qt_direct_index_49+sohu_five_day_volume"
+    },
+    {
+      "field": "volume_ratio.verification.method",
+      "value": "same_day_snapshot_plus_sohu_five_day_cross_check"
+    },
+    {
+      "field": "volume_ratio.verification.source",
+      "value": "tencent_qt_direct_index_49+sohu_five_day_volume"
+    },
+    {
+      "field": "volume_ratio.verification.source_date",
+      "value": "2026-07-24"
+    }
+  ],
+  "symbol": "300274",
+  "trade_date": "2026-07-24",
+  "unresolved_fields": [
+    {
+      "field": "disclosure_status",
+      "source": "needs_manual_check",
+      "value": true
+    },
+    {
+      "field": "market_indices",
+      "source": "needs_manual_check",
+      "value": true
+    },
+    {
+      "field": "news_policy_context",
+      "source": "needs_manual_check",
+      "value": true
+    },
+    {
+      "field": "sector_context",
+      "source": "needs_manual_check",
+      "value": true
+    }
+  ],
+  "validator_result": {
+    "status": "passed"
+  },
+  "write_action": "created",
+  "write_reason_code": "official_written_partial"
+}

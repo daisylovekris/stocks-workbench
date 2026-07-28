@@ -1,0 +1,178 @@
+{
+  "generated_at": "2026-07-23T14:33:20Z",
+  "missing": {
+    "disclosure_status": null,
+    "market_indices": null,
+    "news_policy_context": null,
+    "sector_context": null
+  },
+  "name": "阳光电源",
+  "needs_manual_check": {
+    "disclosure_status": true,
+    "market_indices": true,
+    "news_policy_context": true,
+    "sector_context": true,
+    "volume_ratio": false
+  },
+  "quote": {
+    "amount": 107.19171879,
+    "close": 117.79,
+    "high": 118.27,
+    "low": 108.5,
+    "open": 109.78,
+    "pct_change": 7.13051386994088,
+    "prev_close": 109.95,
+    "turnover_rate": 5.86
+  },
+  "quote_verification": {
+    "delta": 0.0005138699408799852,
+    "derived_pct_change": 7.13051386994088,
+    "error_message": null,
+    "error_type": null,
+    "fetched_at": "2026-07-23T14:33:19Z",
+    "field_sources": {
+      "amount": "tencent_qt_snapshot",
+      "close": "tencent_fqkline",
+      "high": "tencent_fqkline",
+      "low": "tencent_fqkline",
+      "open": "tencent_fqkline",
+      "prev_close": "tencent_fqkline",
+      "turnover_rate": "tencent_qt_snapshot"
+    },
+    "notes": null,
+    "source": "tencent",
+    "source_date": "2026-07-23",
+    "source_pct_change": 7.13,
+    "status": "confirmed"
+  },
+  "run": {
+    "errors": [],
+    "fetched_at": "2026-07-23T14:33:19Z",
+    "name_source": "source",
+    "requested_source": "auto",
+    "source_used": "tencent",
+    "status": "partial",
+    "target_date": "2026-07-23"
+  },
+  "schema_version": "facts_pack_v0.2",
+  "symbol": "300274",
+  "trade_date": "2026-07-23",
+  "volume_ratio": {
+    "candidate_value": 1.36,
+    "confirmed_value": 1.36,
+    "cross_check": {
+      "delta": 0.0,
+      "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+      "source": "sohu_five_day_volume_derived",
+      "source_date": "2026-07-23",
+      "tolerance": 0.05,
+      "value": 1.36
+    },
+    "five_day_volume_check": {
+      "calculated_value": 1.36,
+      "expected_value": 1.36,
+      "fetched_at": "2026-07-23T14:33:19Z",
+      "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+      "source": "sohu_history",
+      "status": "passed",
+      "target_volume": 930068.0,
+      "tolerance": 0.05,
+      "trade_dates": [
+        "2026-07-16",
+        "2026-07-17",
+        "2026-07-20",
+        "2026-07-21",
+        "2026-07-22",
+        "2026-07-23"
+      ],
+      "volumes": [
+        624787.0,
+        622050.0,
+        659284.0,
+        670682.0,
+        847182.0,
+        930068.0
+      ]
+    },
+    "snapshot_ohlc_check": {
+      "archived_ohlc": {
+        "close": 117.79,
+        "high": 118.27,
+        "low": 108.5,
+        "open": 109.78
+      },
+      "archived_source": "tencent_qt_direct_index_49",
+      "archived_source_date": "2026-07-23",
+      "compared_fields": [
+        "open",
+        "high",
+        "low",
+        "close"
+      ],
+      "fetched_at": "2026-07-23T14:33:19Z",
+      "field_results": {
+        "close": {
+          "delta": 0.0,
+          "left": 117.79,
+          "matched": true,
+          "right": 117.79
+        },
+        "high": {
+          "delta": 0.0,
+          "left": 118.27,
+          "matched": true,
+          "right": 118.27
+        },
+        "low": {
+          "delta": 0.0,
+          "left": 108.5,
+          "matched": true,
+          "right": 108.5
+        },
+        "open": {
+          "delta": 0.0,
+          "left": 109.78,
+          "matched": true,
+          "right": 109.78
+        }
+      },
+      "historical_ohlc": {
+        "close": 117.79,
+        "high": 118.27,
+        "low": 108.5,
+        "open": 109.78
+      },
+      "historical_source": "sohu_history",
+      "historical_source_date": "2026-07-23",
+      "matched_to": "sohu_history",
+      "ohlc": {
+        "close": 117.79,
+        "high": 118.27,
+        "low": 108.5,
+        "open": 109.78
+      },
+      "snapshot_ohlc": {
+        "close": 117.79,
+        "high": 118.27,
+        "low": 108.5,
+        "open": 109.78
+      },
+      "snapshot_source": "tencent_qt_direct_index_49",
+      "source_date": "2026-07-23",
+      "status": "passed",
+      "tolerance": 0.02
+    },
+    "source": "tencent_qt_direct_index_49+sohu_five_day_volume",
+    "verification": {
+      "confirmed_by": "automation_cross_check",
+      "error_message": null,
+      "error_type": null,
+      "fetched_at": "2026-07-23T14:33:19Z",
+      "method": "same_day_snapshot_plus_sohu_five_day_cross_check",
+      "notes": "same-day Tencent close snapshot confirmed by Sohu five-day volume calculation",
+      "source": "tencent_qt_direct_index_49+sohu_five_day_volume",
+      "source_date": "2026-07-23",
+      "status": "confirmed"
+    }
+  }
+}

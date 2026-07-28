@@ -1,0 +1,18 @@
+{
+  "schema_version": "review_bundle_manifest_v0.1",
+  "bundle_root": "reports/validation/artifacts/sunday_weekly_pipeline_v0.1_design_2026-07-26",
+  "base_head": "b409f40ab2f4334e2f1205acb56b5a1628d38e9d",
+  "generated_at": "2026-07-26T22:23:54+08:00",
+  "files": [
+    {"path":"reports/validation/artifacts/sunday_weekly_pipeline_v0.1_design_2026-07-26/design_spec.md","size_bytes":519,"sha256":"ff91b42937a5c0cb4fe130042dabfd3b840d255b976807af2b24de9cd927bb9a"},
+    {"path":"reports/validation/artifacts/sunday_weekly_pipeline_v0.1_design_2026-07-26/fable_independent_review_prompt.md","size_bytes":984,"sha256":"f6786cb63fc038843e9f7e10043a5f023704ec5cbe43ef9d88bf1146f5c29b5c"},
+    {"path":"reports/validation/artifacts/sunday_weekly_pipeline_v0.1_design_2026-07-26/golden_sample_summary.md","size_bytes":850,"sha256":"190b1c3cf0a1d14d69a13dae4deec658f5210d0a3fd86f21e22e22cd6f9f6811"},
+    {"path":"reports/validation/artifacts/sunday_weekly_pipeline_v0.1_design_2026-07-26/module_map.md","size_bytes":1532,"sha256":"c38a740a5ae996b834f0720f24ef7569848bdeb9977d7728cf962a076ba96360"},
+    {"path":"reports/validation/artifacts/sunday_weekly_pipeline_v0.1_design_2026-07-26/scope_limit.md","size_bytes":431,"sha256":"57f77d7fc804bc9670484f291a5d0f2694c2a530beaec020ec477b0df87a152b"},
+    {"path":"reports/validation/artifacts/sunday_weekly_pipeline_v0.1_design_2026-07-26/status_matrix.md","size_bytes":1292,"sha256":"66b5cd0977db118710771cf084d1b79dfcdc63b52f029ec2430f135b7baae07a"},
+    {"path":"reports/validation/artifacts/sunday_weekly_pipeline_v0.1_design_2026-07-26/test_matrix.md","size_bytes":1548,"sha256":"98fb2fd46d881ac66623da17408bd126ea2f44647c1ac142a8d9e0c9a83b60e0"},
+    {"path":"reports/validation/artifacts/sunday_weekly_pipeline_v0.1_design_2026-07-26/write_lock_sequence.md","size_bytes":929,"sha256":"e8ce21346eaf4a98a428058eb3a64f40ff1c726612c5afadf1880903453a520d"}
+  ],
+  "package_hash_algorithm": "sha256(UTF-8 canonical JSON {\"files\":[...]} with sort_keys=true, separators=(',',':'); files sorted by path; package_sha256 excluded)",
+  "package_sha256": "23eefce624af7a6ace4dd890d676df86c1b02e6e02bd78c1737a8750822f03a0"
+}

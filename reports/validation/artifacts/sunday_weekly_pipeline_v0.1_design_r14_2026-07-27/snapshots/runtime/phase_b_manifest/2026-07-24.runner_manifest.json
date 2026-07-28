@@ -1,0 +1,101 @@
+{
+  "alerts": [],
+  "calendar": {
+    "coverage_end": "2026-07-31",
+    "coverage_start": "2026-07-01",
+    "path": "/Users/wongdaisy/Mimo-Lab/stocks/config/a_share_trading_calendar_2026.json",
+    "sha256": "fd693d1e62b46408e7fbff3049e06cd368e5026279398d0c5e5344e3472add5e",
+    "source": "sse_szse_official_2026_holiday_notices_verified_2026-07-22",
+    "version": "2026-07-phase-a-2026-07-15-omission-fix-v1"
+  },
+  "candidate_path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-24/43532eec-41b9-4c9a-8fc6-2dc763c19a84/candidate.json",
+  "candidate_sha256": "09b30acc84ae65715859101880ba9eb4ac1c5bf14afa27770323f0e806debff7",
+  "comparison": null,
+  "dry_run": false,
+  "duration_ms": 1175,
+  "exception": null,
+  "finished_at": "2026-07-26T04:17:26.601796+08:00",
+  "generator": {
+    "command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "-B",
+      "/Users/wongdaisy/Mimo-Lab/stocks/tools/generate_daily_facts.py",
+      "--symbol",
+      "300274",
+      "--date",
+      "2026-07-24",
+      "--output",
+      "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-24/43532eec-41b9-4c9a-8fc6-2dc763c19a84/candidate.json",
+      "--dry-run",
+      "--emit-runner-marker",
+      "--timeout",
+      "15.0"
+    ],
+    "exit_code": 2,
+    "protocol_reason": null,
+    "result_status": "partial",
+    "stderr_path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-24/43532eec-41b9-4c9a-8fc6-2dc763c19a84/generator_stderr.txt",
+    "stdout_path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-24/43532eec-41b9-4c9a-8fc6-2dc763c19a84/generator_stdout.txt"
+  },
+  "last_stage": "official",
+  "manifest_bundle_failed": false,
+  "manifest_bundle_reason_code": null,
+  "manifest_path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-24/43532eec-41b9-4c9a-8fc6-2dc763c19a84/manifest.json",
+  "mode": "historical_backfill",
+  "needs_manual_review": true,
+  "now": "2026-07-26T04:17:25.426946+08:00",
+  "official_bytes_equal_candidate": true,
+  "official_changed": true,
+  "official_exists_before": false,
+  "official_path": "/Users/wongdaisy/Mimo-Lab/stocks/data/daily/300274_2026-07-24_facts.json",
+  "official_post_write_error": null,
+  "official_sha256_after": "09b30acc84ae65715859101880ba9eb4ac1c5bf14afa27770323f0e806debff7",
+  "official_sha256_before": null,
+  "official_validator_after": {
+    "status": "passed"
+  },
+  "official_validator_before": {
+    "status": "passed"
+  },
+  "outcome": "partial",
+  "partial_write_policy": {
+    "eligible": true,
+    "missing_keys": [
+      "disclosure_status",
+      "market_indices",
+      "news_policy_context",
+      "sector_context"
+    ],
+    "needs_manual_review": true,
+    "reason_code": "eligible_partial_official"
+  },
+  "pid": 76565,
+  "previous_run_id": "e0f7bf86-8a1c-4dd4-9a81-a68a4340e80f",
+  "reason": "受控补齐2026-07-24历史官方事实并生成Phase C review manifest",
+  "reason_code": "official_written_partial",
+  "retry_count": 0,
+  "run_id": "43532eec-41b9-4c9a-8fc6-2dc763c19a84",
+  "runtime_dir": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime",
+  "scan_diagnostics": [
+    {
+      "path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-24/ded81ca8-0d0a-4c9e-9cd1-fe758eae3523/manifest.json",
+      "reason": "completion invalid: completion_identity_mismatch"
+    },
+    {
+      "path": "/Users/wongdaisy/Library/Application Support/Mimo-Lab/stocks-runtime/runs/2026-07-24/e0f7bf86-8a1c-4dd4-9a81-a68a4340e80f/manifest.json",
+      "reason": "completion invalid: completion_run_mode_invalid"
+    }
+  ],
+  "scheduled_cutoff": "15:20",
+  "schema_version": "runner_manifest_v0.2_phase_b",
+  "stage": "finished",
+  "started_at": "2026-07-26T04:17:25.426805+08:00",
+  "symbol": "300274",
+  "target_date": "2026-07-24",
+  "timezone": "Asia/Shanghai",
+  "validator": {
+    "status": "passed"
+  },
+  "write_action": "created",
+  "write_official": true
+}

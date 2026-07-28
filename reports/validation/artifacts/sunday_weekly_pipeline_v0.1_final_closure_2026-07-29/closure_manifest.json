@@ -1,0 +1,23 @@
+{
+  "schema_version": "sunday_weekly_pipeline_final_closure_v0.1",
+  "base_head": "b409f40ab2f4334e2f1205acb56b5a1628d38e9d",
+  "final_commit": "475ec8e6889a625ebeceb733a7c115cdbaf696df",
+  "design_version": "r14",
+  "design_package_sha256": "e2301e00fb97a1b1383ba13ec1400693c265984370eb6c74ae0c0eccc6522f6d",
+  "review_manifest_sha256": "855d78da78fd373156e76a2394c00532c6bb557521f22d84637a0bdd3d741df6",
+  "file_manifest_sha256": "24c1fc60f8a71710f3d98e0aa6039b56039124af229a791ccc68dd59af0a7911",
+  "golden_input_set_sha256": "9af2c2dbe1b6556bcf4c2fc332d45f3a31131f1933f2d75963c6fa505af17293",
+  "golden_candidate_sha256": "ae5d74c61ab6cda5e5adf44db33607f314d21873a585fb5564518aaff5018b03",
+  "pi_fable_raw_sha256": "2b0c8bfa04416729ae1de892f0b1debe68aab4a741e40c631d8cf4b603cbd938",
+  "ab_comparison_sha256": "174c3ad6af4e1579cc2de7bf5a2b84fa5613313d12ff8c024a160fa9d2287034",
+  "pi_run_meta_sha256": "24d38f481098579b2ed01bb8d792b585392b807661003dfc83e82b15bc0b8fcd",
+  "bare_fable_raw_sha256": "27edebeb3db5dd6aa1419fb3819aca49e29966152e4a673481215576713efc34",
+  "fable_decision": "GREEN_LIGHT",
+  "p1_count": 0,
+  "p2_count": 0,
+  "p3_count": 1,
+  "p3_adjudication": "Non-blocking: r14 directory .DS_Store is outside 82 sealed files and package SHA; future packagers exclude OS metadata.",
+  "final_review_entry": "PI_GUARDED",
+  "sol_implementation_ready": true,
+  "new_full_review_forbidden": true
+}

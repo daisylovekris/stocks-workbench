@@ -1,0 +1,3 @@
+# Candidate semantic contract v0.1
+
+Trading dates are ascending, unique, and exactly the calendar window trading days; trading_day_count equals their length. week_start/week_end are Monday/Friday of the as_of Sunday window. Metrics: week_open=first trading open, week_high=max high, week_low=min low, week_close=last close, weekly_change_pct=(week_close/pre_window_prev_close-1)*100, total_amount=sum amount, averages=sum/count. Units are price/CNY amount/percent/ratio/count. All Decimal strings use schema canonical form. unresolved_fields are sorted trade_date/source/field. Candidate bytes are UTF-8 JSON sort_keys=true,separators=(',',':').
