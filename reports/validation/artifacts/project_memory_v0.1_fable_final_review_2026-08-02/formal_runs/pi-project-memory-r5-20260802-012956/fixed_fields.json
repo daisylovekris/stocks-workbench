@@ -1,0 +1,35 @@
+{
+  "fields": {
+    "ACTUAL_MODEL": "anthropic/claude-fable-5",
+    "BACKEND": "Pi guarded tools via ZenMux",
+    "PACKAGE_SHA_EXPECTED": "64dfa32ad9573bfdea074b7731c2dace324b693bc8e47dcbfe4dc8d37a3f9bfd",
+    "PACKAGE_SHA_RECOMPUTED": "64dfa32ad9573bfdea074b7731c2dace324b693bc8e47dcbfe4dc8d37a3f9bfd",
+    "SEALED_MEMBER_SET_MATCH": "YES",
+    "ALL_SIZE_BYTES_MATCH": "YES",
+    "ALL_FILE_SHA256_MATCH": "YES",
+    "PACKAGE_SHA256_MATCH": "YES",
+    "MANIFEST_EXCLUDED": "YES",
+    "MAIN_REPORT_INCLUDED": "YES",
+    "FOCUSED_PROMPT_INCLUDED": "YES",
+    "DS_STORE_INCLUDED": "NO",
+    "P1_COUNT": "0",
+    "P2_COUNT": "0",
+    "P3_COUNT": "0",
+    "VERDICT": "GREEN_LIGHT",
+    "PROJECT_MEMORY_V0.1_IMPLEMENTATION_READY": "YES"
+  },
+  "normalized_booleans": {
+    "SEALED_MEMBER_SET_MATCH": true,
+    "ALL_SIZE_BYTES_MATCH": true,
+    "ALL_FILE_SHA256_MATCH": true,
+    "PACKAGE_SHA256_MATCH": true,
+    "MANIFEST_EXCLUDED": true,
+    "MAIN_REPORT_INCLUDED": true,
+    "FOCUSED_PROMPT_INCLUDED": true,
+    "DS_STORE_INCLUDED": false
+  },
+  "missing_fields": [],
+  "validation_errors": [],
+  "validation_pass": true,
+  "original_validator_failure": "The original validator accepted only true/false; the valid report used YES/NO."
+}

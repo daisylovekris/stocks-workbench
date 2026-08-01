@@ -1,0 +1,122 @@
+You are responsible for the final focused independent review of Project Memory v0.1 design r5.
+
+Runtime launch metadata for the two runtime fields only:
+
+ACTUAL_MODEL = anthropic/claude-fable-5
+BACKEND = Pi guarded tools via ZenMux
+
+For every design conclusion and finding, use only the r5 mother package and the commit-bound evidence declared by its manifest.
+
+Repository root:
+
+/Users/wongdaisy/Mimo-Lab/stocks
+
+The sandbox preserves the same repository-relative paths.
+
+The only review objects are:
+
+reports/validation/project_memory_v0.1_design_r5_2026-07-29.md
+
+reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/
+
+Expected package SHA-256:
+
+64dfa32ad9573bfdea074b7731c2dace324b693bc8e47dcbfe4dc8d37a3f9bfd
+
+First read:
+
+reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/design_manifest.json
+
+Then read:
+
+reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/focused_review_prompt.md
+
+Review nature:
+
+- final focused design review
+- read-only
+- do not modify any file
+- do not create memory/
+- do not stage, commit, or push
+- do not generate implementation or validators
+- use only the r5 package and manifest-declared commit-bound evidence
+- do not rely on r0-r4 or conversation content to fill gaps
+
+Independently recompute:
+
+1. exact sealed_files member set
+2. sealed_payload_count = 17
+3. sealed_artifact_count = 16
+4. main_report_count = 1
+5. actual size_bytes of every member
+6. actual SHA-256 of every member
+7. design_package_sha256
+8. design_manifest.json is excluded from sealed_files
+9. the main report is included in sealed_files
+10. focused_review_prompt.md is included in sealed_files
+11. .DS_Store is excluded from sealed_files
+
+Review:
+
+- whether the status enumeration is closed
+- whether all seven Phase entries are complete and semantically accurate
+- whether all nine Agent entries are complete and avoid overbroad generalization
+- whether authorization grounds for all nine ADR entries are accurate
+- whether the 39-item source inventory forms a complete closed loop
+- whether all seed evidence is expanded
+- whether the 15-row conflict matrix is complete
+- whether project_state matches the post-sealing state
+- whether the non-authoritative Memory boundary is clear
+- whether a self-referential future commit SHA loop exists
+- whether any trading, Git, review-verdict, or business-state authority is granted
+- whether SWP remains design-only / candidate-only
+- whether Phase D remains a deferred reservation
+
+Finding levels:
+
+P1:
+Blocking safety, identity, authority, or reproducibility failure.
+
+P2:
+Blocking contract completeness, state semantics, evidence closure, or implementation uniqueness failure.
+
+P3:
+Non-blocking minor wording, archival, or maintenance issue.
+
+Only when:
+
+P1=0
+P2=0
+
+may you return:
+
+GREEN_LIGHT
+PROJECT_MEMORY_V0.1_IMPLEMENTATION_READY=YES
+
+Required fixed output fields:
+
+ACTUAL_MODEL =
+BACKEND =
+PACKAGE_SHA_EXPECTED =
+PACKAGE_SHA_RECOMPUTED =
+SEALED_MEMBER_SET_MATCH =
+ALL_SIZE_BYTES_MATCH =
+ALL_FILE_SHA256_MATCH =
+PACKAGE_SHA256_MATCH =
+MANIFEST_EXCLUDED =
+MAIN_REPORT_INCLUDED =
+FOCUSED_PROMPT_INCLUDED =
+DS_STORE_INCLUDED =
+
+P1_COUNT =
+P2_COUNT =
+P3_COUNT =
+
+VERDICT =
+PROJECT_MEMORY_V0.1_IMPLEMENTATION_READY =
+
+After the fixed fields, provide the full independent review in Markdown.
+
+Every finding must include exact file and line evidence.
+
+Do not modify files, stage, commit, or push.

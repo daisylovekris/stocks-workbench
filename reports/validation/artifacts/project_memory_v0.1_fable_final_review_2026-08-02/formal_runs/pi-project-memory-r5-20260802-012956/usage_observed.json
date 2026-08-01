@@ -1,0 +1,150 @@
+{
+  "assistant_message_count": 1,
+  "errors": [],
+  "usage_records": [
+    {
+      "input": 2,
+      "output": 172,
+      "cacheRead": 0,
+      "cacheWrite": 2737,
+      "totalTokens": 2911,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      },
+      "cacheWrite1h": 0,
+      "reasoning": 0
+    },
+    {
+      "input": 2,
+      "output": 97,
+      "cacheRead": 2737,
+      "cacheWrite": 3010,
+      "totalTokens": 5846,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      },
+      "cacheWrite1h": 0,
+      "reasoning": 0
+    },
+    {
+      "input": 2,
+      "output": 330,
+      "cacheRead": 0,
+      "cacheWrite": 10221,
+      "totalTokens": 10553,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      },
+      "cacheWrite1h": 0,
+      "reasoning": 0
+    },
+    {
+      "input": 2,
+      "output": 178,
+      "cacheRead": 10221,
+      "cacheWrite": 7602,
+      "totalTokens": 18003,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      },
+      "cacheWrite1h": 0,
+      "reasoning": 0
+    },
+    {
+      "input": 2,
+      "output": 262,
+      "cacheRead": 17823,
+      "cacheWrite": 11314,
+      "totalTokens": 29401,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      },
+      "cacheWrite1h": 0,
+      "reasoning": 0
+    },
+    {
+      "input": 2,
+      "output": 215,
+      "cacheRead": 29137,
+      "cacheWrite": 4864,
+      "totalTokens": 34218,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      },
+      "cacheWrite1h": 0,
+      "reasoning": 0
+    },
+    {
+      "input": 2,
+      "output": 524,
+      "cacheRead": 34001,
+      "cacheWrite": 12202,
+      "totalTokens": 46729,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      },
+      "cacheWrite1h": 0,
+      "reasoning": 92
+    },
+    {
+      "input": 2,
+      "output": 152,
+      "cacheRead": 46203,
+      "cacheWrite": 2266,
+      "totalTokens": 48623,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      },
+      "cacheWrite1h": 0,
+      "reasoning": 65
+    },
+    {
+      "input": 2,
+      "output": 4630,
+      "cacheRead": 48469,
+      "cacheWrite": 3058,
+      "totalTokens": 56159,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0
+      },
+      "cacheWrite1h": 0,
+      "reasoning": 334
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "sealed_payload_count": 17,
+  "sealed_artifact_count": 16,
+  "main_report_count": 1,
+  "manifest_excluded": true,
+  "main_report_included": true,
+  "focused_prompt_included": true,
+  "ds_store_included": false,
+  "missing": [],
+  "extra": [],
+  "size_mismatches": [],
+  "sha_mismatches": [],
+  "package_sha_expected": "64dfa32ad9573bfdea074b7731c2dace324b693bc8e47dcbfe4dc8d37a3f9bfd",
+  "package_sha_recomputed": "64dfa32ad9573bfdea074b7731c2dace324b693bc8e47dcbfe4dc8d37a3f9bfd",
+  "package_sha256_match": true,
+  "files": [
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/adr_seed_inventory.md",
+      "size_bytes": 11929,
+      "sha256": "769740dd9a21934fb618031cd6f801e10ac9548447905062e98eeacadefbceae"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/agent_benchmark_seed.md",
+      "size_bytes": 10588,
+      "sha256": "ae7fe4e3881e2b2b5a9afbb3c8c7515afd63c0b9e9713a1e1c25fbdf47caa87f"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/conflict_resolution_matrix.md",
+      "size_bytes": 7107,
+      "sha256": "b9a2f2b9dda9bcedc24d8849baa8f8217636766ed83983adf308e1158a5e02f2"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/excluded_diagnostic_notes.md",
+      "size_bytes": 208,
+      "sha256": "9896c2e79721e6de6bdcf19a5a175f0792109a094512b037e445f14132250c9b"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/file_schema_matrix.md",
+      "size_bytes": 2769,
+      "sha256": "c67fd01bfc46119ecb05e272019721146ea15cbccf8788e8b7a6a65e32b20681"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/focused_review_prompt.md",
+      "size_bytes": 1217,
+      "sha256": "e812823354fbe389af42de2c92a510d399b8bf8f33ede1ace52ac1b8c5f8e277"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/open_questions.md",
+      "size_bytes": 43,
+      "sha256": "fa649b18e06f63fb5ff22e56355f77868d07944a89ddf923c34d55c56cfc20dd"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/phase_registry_seed.md",
+      "size_bytes": 11384,
+      "sha256": "2a997b54871bf6881e318867e2e6c6295d8dda4fe1148005f6c9aaeb8e8d8e57"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/project_state_seed.md",
+      "size_bytes": 3948,
+      "sha256": "4ce3d95d1df65c2e3f6fed34b1fecf19a67aa1ed1346ca3cdcfbb6bc9704f107"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/proposed_tree.md",
+      "size_bytes": 211,
+      "sha256": "cfffcd453ffa270f9078c1dfc19ddacc991e8dec18da6b3c5d532987aa792fa1"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/scope_and_non_authority.md",
+      "size_bytes": 307,
+      "sha256": "c47f95eaafbcfc3b4609363443eed53ea414bc1a04337572c86b0d38691ce013"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/source_inventory.json",
+      "size_bytes": 19958,
+      "sha256": "f47ecf605945b4dd1ecf1b8876b26d6890e6a162692219d22a4d95f1730fe6ca"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/source_priority_matrix.md",
+      "size_bytes": 376,
+      "sha256": "ca1a6e8ce022d1fbd951daa8463c1d519761f23c9bf4934d80805e097dadca5b"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/status_contract.md",
+      "size_bytes": 930,
+      "sha256": "e89a08ef7f3fda74de1b04dc9fed0280a2aee5706315b3718f278a95b52ebdd9"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/update_workflow.md",
+      "size_bytes": 5467,
+      "sha256": "7d243d6b51111bcbb0350dee6e6dd274cd4890fd5d2e3e0611ef3729c1e4e691"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/validation_plan.md",
+      "size_bytes": 7443,
+      "sha256": "0dc1ae47018bc02bf64b05556c980db96fe44eec19f7b2af08b266c36b70be3e"
+    },
+    {
+      "path": "reports/validation/project_memory_v0.1_design_r5_2026-07-29.md",
+      "size_bytes": 1309,
+      "sha256": "70dec8e1b0eea6d726bd875cf1ed2ca66e69cc5d1cec2d98a677aa1883543d13"
+    }
+  ],
+  "preflight_pass": true
+}

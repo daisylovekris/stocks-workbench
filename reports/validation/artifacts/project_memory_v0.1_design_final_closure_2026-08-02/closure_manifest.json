@@ -1,0 +1,107 @@
+{
+  "schema_version": "project_memory_v0.1_design_final_closure_v0.1",
+  "base_head": "bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca",
+  "design_version": "r5",
+  "design_package_sha256": "64dfa32ad9573bfdea074b7731c2dace324b693bc8e47dcbfe4dc8d37a3f9bfd",
+  "sealed_payload_count": 17,
+  "sealed_artifact_count": 16,
+  "main_report_count": 1,
+  "review_run_id": "pi-project-memory-r5-20260802-012956",
+  "actual_model": "anthropic/claude-fable-5",
+  "provider": "ZenMux",
+  "backend": "Pi guarded tools",
+  "thinking": "low",
+  "review_report_sha256": "bfa6076db3fa39da1bfe266a3cdd9dddbd259f7355905c1e092f71b1532bb55f",
+  "review_guard_sha256": "967ce211d5711bb9131d570ae24fea2afef4e38e23442f0977e9ceef4ddee5d7",
+  "formal_run_cost_usd": 1.232696,
+  "recovery_status": "completed",
+  "fixed_output_validation_pass": true,
+  "p1_count": 0,
+  "p2_count": 0,
+  "p3_count": 0,
+  "verdict": "GREEN_LIGHT",
+  "implementation_ready": true,
+  "closure_commit_sha_embedded": false,
+  "commit_message": "Seal Project Memory v0.1 design closure",
+  "push_performed": false,
+  "selected_review_evidence": [
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/formal_prompt.txt",
+      "size_bytes": 3408,
+      "sha256": "9f175283424699af7ac7022977e98112e6a6686d65542613da2cc0294cbc35b6",
+      "role": "formal_review_prompt"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/fable_raw.md",
+      "size_bytes": 10277,
+      "sha256": "bfa6076db3fa39da1bfe266a3cdd9dddbd259f7355905c1e092f71b1532bb55f",
+      "role": "raw_independent_review_report"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/fixed_fields.json",
+      "size_bytes": 1234,
+      "sha256": "6a211521ca7054024d599d3b6bb60f9fc69ee4b13251ba319d5de90a9c416cee",
+      "role": "normalized_fixed_output_validation"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/fixed_fields_original_failed.json",
+      "size_bytes": 1081,
+      "sha256": "dbd792caf60e47287dce8f2fd972fe5257f7e0ec061e17a06d9fa8f0174805ef",
+      "role": "original_fixed_output_validator_result"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/guard_sha256.txt",
+      "size_bytes": 65,
+      "sha256": "0e5afd77ed0fde4e3648cb1e8c1f26440322c50da707c646ffc4dd155255831d",
+      "role": "declared_guard_sha256"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/project-memory-r5-review-guard.ts",
+      "size_bytes": 22196,
+      "sha256": "967ce211d5711bb9131d570ae24fea2afef4e38e23442f0977e9ceef4ddee5d7",
+      "role": "guarded_review_harness_source"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/recovery_note.md",
+      "size_bytes": 549,
+      "sha256": "524107004cb00258b6c14b78dba6e05378036299626db0a58f4c6e0c8b23525b",
+      "role": "recovery_adjudication_note"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/report_sha256.txt",
+      "size_bytes": 65,
+      "sha256": "93888e9dbdcdb6343ac949de0c250b78a5382604b1d686d0c2d1026f5a502f8f",
+      "role": "declared_report_sha256"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/run_meta.json",
+      "size_bytes": 1919,
+      "sha256": "3a615d6bfa84d9ca0df5bd10c8175d344a4ffd20e2be9b2f7673ae50b3478f26",
+      "role": "recovered_formal_run_metadata"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/sandbox_preflight.json",
+      "size_bytes": 4469,
+      "sha256": "fed0e69ada64bb90c8d227790bb2946a0a196731b1af7eabd691dec2bf9421ec",
+      "role": "design_package_preflight"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/source_git_status_before.txt",
+      "size_bytes": 3021,
+      "sha256": "9d51c75da26a025acf1f983e7870effa95579a932b3812e356210586b3ef61be",
+      "role": "source_git_status_before_review"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/source_git_status_after.txt",
+      "size_bytes": 3021,
+      "sha256": "9d51c75da26a025acf1f983e7870effa95579a932b3812e356210586b3ef61be",
+      "role": "source_git_status_after_review"
+    },
+    {
+      "path": "reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/usage_observed.json",
+      "size_bytes": 2880,
+      "sha256": "3b93855e8ecbb88429ab8e99fda2c21241ba01fb797c4c3545e71f1b08c9e407",
+      "role": "observed_model_usage"
+    }
+  ]
+}
