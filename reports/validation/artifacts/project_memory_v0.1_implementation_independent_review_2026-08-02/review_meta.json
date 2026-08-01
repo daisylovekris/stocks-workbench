@@ -1,0 +1,23 @@
+{
+  "schema_version": "project_memory_v0.1_implementation_independent_review_v0.1",
+  "actual_model": "gpt-5.5",
+  "reasoning_effort": "high",
+  "provider": "chatgpt-http",
+  "review_scope": "Project Memory v0.1 implementation candidate",
+  "reviewed_head": "d33a7cfd39a8608524096021ae581a6825bc5cc4",
+  "memory_file_count": 13,
+  "evidence_object_count": 66,
+  "p1_count": 0,
+  "p2_count": 0,
+  "p3_count": 0,
+  "verdict": "GREEN_LIGHT",
+  "implementation_commit_ready": true,
+  "raw_output_size_bytes": 1358,
+  "raw_output_sha256": "9b7167727a4d4b4732f09e890d0ca1e80bb74bb678c3f059f08ea32a24c1d6b7",
+  "source_rollout_id": "019fbec8-f985-7f41-80d4-3de60283fcc3",
+  "source_rollout_sha256": "7111c1f7db7c17fe2fdeaa26ac7627233708b515913a81659102eaa2d3002c94",
+  "source_worktree_unchanged": true,
+  "staged": false,
+  "committed": false,
+  "pushed": false
+}
