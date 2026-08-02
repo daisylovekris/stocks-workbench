@@ -1,0 +1,40 @@
+{
+  "schema_version": "project_memory_v0.1_state_refresh_independent_review_meta_v0.1",
+  "review_type": "state_refresh_independent_review",
+  "repository": ".",
+  "source_kind": "user_supplied_warp_terminal_transcript",
+  "reported_model": "Kimi Code",
+  "terminal_runtime_label": "CUN Kimi K3 thinking",
+  "model_identity_evidence": "terminal transcript",
+  "reviewed_head": "f38b563502fa7e098f8420062c5b71f9fb231fdf",
+  "candidate_files": [
+    {
+      "path": "memory/project_state.md",
+      "size_bytes": 8171,
+      "sha256": "70d3f4b7fb8425bd43053e18c8b20b818efadaa4a2e3f603b0b352b228d716ae"
+    },
+    {
+      "path": "memory/phase_registry.md",
+      "size_bytes": 17612,
+      "sha256": "6f2256ffedcb954783e6c808a288aa2423b35c340b4ad6857ac3c5956470bd9a"
+    },
+    {
+      "path": "reports/validation/project_memory_v0.1_state_refresh_candidate_2026-08-03.md",
+      "size_bytes": 7845,
+      "sha256": "0d8b893c697ff08c33df7a8ffe74337ccef37c077df3e3b454ad8ca6e574860d"
+    }
+  ],
+  "fixed_output": {
+    "path": "reports/validation/artifacts/project_memory_v0.1_state_refresh_independent_review_2026-08-03/kimi_code_fixed_output.md",
+    "size_bytes": 647,
+    "sha256": "872c425d3551da8dfea8867862ba86b39299c4d686ff16844f7bef1b1dab2537"
+  },
+  "index_empty": true,
+  "source_worktree_unchanged": true,
+  "staged_during_review": false,
+  "committed_during_review": false,
+  "pushed_during_review": false,
+  "rollout_id": null,
+  "provider": null,
+  "cost": null
+}

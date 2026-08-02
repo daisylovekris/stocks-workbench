@@ -167,30 +167,46 @@ evidence:
 phase_id: project_memory
 name: Project Memory v0.1
 scope: implementation
-work_status: in_progress
-completed_scopes: [design, validation, closure]
+work_status: completed
+completed_scopes: [design, implementation, validation, closure]
 design_status: frozen_design
-implementation_status: in_progress
-validation_status: not_started
+implementation_status: implemented
+validation_status: validated
 closure_status: closed
-closure_scope: design
+closure_scope: implementation
 relationship: follows_swp_design_closure
 superseded_by: null
 rule_paths: []
-implementation_paths: []
+implementation_paths: [memory/README.md, memory/project_state.md, memory/phase_registry.md, memory/agent_benchmark.md, memory/decisions/ADR-0001.md, memory/decisions/ADR-0002.md, memory/decisions/ADR-0003.md, memory/decisions/ADR-0004.md, memory/decisions/ADR-0005.md, memory/decisions/ADR-0006.md, memory/decisions/ADR-0007.md, memory/decisions/ADR-0008.md, memory/decisions/ADR-0009.md]
 test_paths: []
-validation_paths: [reports/validation/project_memory_v0.1_design_final_closure_2026-08-02.md, reports/validation/artifacts/project_memory_v0.1_design_final_closure_2026-08-02/closure_manifest.json]
-sealing_commit: d33a7cfd39a8608524096021ae581a6825bc5cc4
+validation_paths: [reports/validation/project_memory_v0.1_implementation_candidate_2026-08-02.md, reports/validation/project_memory_v0.1_implementation_independent_review_2026-08-02.md, reports/validation/project_memory_v0.1_implementation_closure_delta_review_2026-08-02.md, reports/validation/project_memory_v0.1_implementation_final_closure_2026-08-02.md, reports/validation/artifacts/project_memory_v0.1_implementation_final_closure_2026-08-02/closure_manifest.json, reports/validation/project_memory_v0.1_provenance_revalidation_2026-08-02.md]
+sealing_commit: 844d8b541d7fd3165ce9e9a1725f207e1764da51
 dependencies: [SWP]
 downstream_permissions: []
 deferred_items: [production validator implementation]
-next_allowed_action: implementation_validation
+next_allowed_action: evidence_refresh
 evidence:
-  - {path: reports/validation/project_memory_v0.1_design_final_closure_2026-08-02.md, snapshot_kind: commit, snapshot_commit: d33a7cfd39a8608524096021ae581a6825bc5cc4, raw_sha256: c891f6c56d65d0dfd6fb4acfe377f48d408674e5830c244829128cb7b72faf7d, role: final_design_closure_report}
-  - {path: reports/validation/artifacts/project_memory_v0.1_design_final_closure_2026-08-02/closure_manifest.json, snapshot_kind: commit, snapshot_commit: d33a7cfd39a8608524096021ae581a6825bc5cc4, raw_sha256: f9d5812da342c088d3b60f4e8f2236357cb3557237f6d3f07c70dbf2b63bd2bd, role: final_design_closure_manifest}
-  - {path: reports/validation/artifacts/project_memory_v0.1_design_r5_2026-07-29/design_manifest.json, snapshot_kind: commit, snapshot_commit: d33a7cfd39a8608524096021ae581a6825bc5cc4, raw_sha256: 92131e36802c9e0359c4c1933a3650f1a1bca5f809788fe9b41adca7e4538d8d, role: r5_design_manifest}
-  - {path: reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/fable_raw.md, snapshot_kind: commit, snapshot_commit: d33a7cfd39a8608524096021ae581a6825bc5cc4, raw_sha256: bfa6076db3fa39da1bfe266a3cdd9dddbd259f7355905c1e092f71b1532bb55f, role: final_independent_review_raw}
-  - {path: reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/formal_runs/pi-project-memory-r5-20260802-012956/run_meta.json, snapshot_kind: commit, snapshot_commit: d33a7cfd39a8608524096021ae581a6825bc5cc4, raw_sha256: 3a615d6bfa84d9ca0df5bd10c8175d344a4ffd20e2be9b2f7673ae50b3478f26, role: final_independent_review_run_metadata}
+  - {path: memory/README.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: a69eb4de77084fc10d5f7a83d7f743fffc389105c28911bf5892c4f6ce3fb0e6, role: implementation}
+  - {path: memory/project_state.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: c3c9ad62558d200971408d3583ab2700fc56c54d5058bb7ff8a2bd12501b252d, role: implementation}
+  - {path: memory/phase_registry.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: 6ec5576800412e0a60214a4886e58b72e11dc7cd99384643f5dbc881b11dd982, role: implementation}
+  - {path: memory/agent_benchmark.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: ce2bdb177f09c2400f917720b78f41c6afaac8bde1850d0d3e3f50622d3ba89e, role: implementation}
+  - {path: memory/decisions/ADR-0001.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: bd4fd73d73f83d7bf8278cf8da1265f0362731c80c7e4217ae19a6e06681db0d, role: implementation}
+  - {path: memory/decisions/ADR-0002.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: 7378cfe32f123f54f1fa5522033d4066b7838652fa80a6d91a610620d057127b, role: implementation}
+  - {path: memory/decisions/ADR-0003.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: 7469535b7bf65a7a480993d42c8f5cbb06df3a8baef7fdb64e725fefda5d592f, role: implementation}
+  - {path: memory/decisions/ADR-0004.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: 32604df46b90ba3b17a8847cf5d092ecf3701d8f1b6fb0e75a82fac4aaf39839, role: implementation}
+  - {path: memory/decisions/ADR-0005.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: 12f18e732d36d16d0ca5acee275e8a665b848e5695fbb1ca73bb9fa3a83a34c7, role: implementation}
+  - {path: memory/decisions/ADR-0006.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: de6128c0f92449e8a56e558f88d80c587fa4d9198b64636548d5cd5350b7b7c9, role: implementation}
+  - {path: memory/decisions/ADR-0007.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: aeb0662668fe1a058d735df56674391669a3244ef7a9dee6ef32fb8f181e9d26, role: implementation}
+  - {path: memory/decisions/ADR-0008.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: df681fda3fea3d368e7835db30a78964499a141df5882d1fab01ecb6f1a29154, role: implementation}
+  - {path: memory/decisions/ADR-0009.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: 44b2313bd74e80f8c4b4041ce159e8290c96d582a6ae56eb851fa02650e2c97e, role: implementation}
+  - {path: reports/validation/project_memory_v0.1_implementation_candidate_2026-08-02.md, snapshot_kind: commit, snapshot_commit: e1723c26efb76bee2aa2b879233a738f4e7e2323, raw_sha256: 27180b432c1201ba468d650a6f51f2e95cf7d4ee57d387cb3467f77a58b17c79, role: implementation_candidate_report}
+  - {path: reports/validation/project_memory_v0.1_implementation_independent_review_2026-08-02.md, snapshot_kind: commit, snapshot_commit: 844d8b541d7fd3165ce9e9a1725f207e1764da51, raw_sha256: b892b0cd6f1d20a1ac9c0fff0a9940854d97fd602d1400e781b3875675c15419, role: historical_implementation_review_report_independence_superseded}
+  - {path: reports/validation/project_memory_v0.1_implementation_closure_delta_review_2026-08-02.md, snapshot_kind: commit, snapshot_commit: 844d8b541d7fd3165ce9e9a1725f207e1764da51, raw_sha256: c54ce48770aca5c4383443212ee891f12df2b8ed912cde11f0fb4dd01566fb11, role: historical_closure_delta_review_report_independence_superseded}
+  - {path: reports/validation/project_memory_v0.1_implementation_final_closure_2026-08-02.md, snapshot_kind: commit, snapshot_commit: 844d8b541d7fd3165ce9e9a1725f207e1764da51, raw_sha256: e525781b932aeede6296419883880b712c75beb47b9f6f8072aedcf2b7018e6a, role: implementation_final_closure_report}
+  - {path: reports/validation/artifacts/project_memory_v0.1_implementation_final_closure_2026-08-02/closure_manifest.json, snapshot_kind: commit, snapshot_commit: 844d8b541d7fd3165ce9e9a1725f207e1764da51, raw_sha256: da4b0f023a18dd136f4f7d398f66294a90fac0b536c9e64c03f1c145d507fbd6, role: implementation_closure_manifest}
+  - {path: reports/validation/project_memory_v0.1_provenance_revalidation_2026-08-02.md, snapshot_kind: commit, snapshot_commit: f38b563502fa7e098f8420062c5b71f9fb231fdf, raw_sha256: a188c02337204fb279fd2adaef5f5da35bcd231a8d7613b9fd6af7fba26f8895, role: provenance_revalidation_report}
+  - {path: reports/validation/artifacts/project_memory_v0.1_provenance_revalidation_2026-08-02/gpt55_high_isolated_output.md, snapshot_kind: commit, snapshot_commit: f38b563502fa7e098f8420062c5b71f9fb231fdf, raw_sha256: 9df09a642651581db5647e048c082608c35ccae9eba30e995e558111d0d0b392, role: provenance_isolated_output}
+  - {path: reports/validation/artifacts/project_memory_v0.1_provenance_revalidation_2026-08-02/review_meta.json, snapshot_kind: commit, snapshot_commit: f38b563502fa7e098f8420062c5b71f9fb231fdf, raw_sha256: 8a8ca17c8021d12ab4ba0d1e488259ec1725479f972f5f03ef3307c124de4510, role: provenance_review_metadata}
 ```
 
 ## D

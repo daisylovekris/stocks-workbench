@@ -5,15 +5,15 @@
 | Field | Value |
 |---|---|
 | `schema_version` | `project_memory_v0.1` |
-| `as_of_commit` | `d33a7cfd39a8608524096021ae581a6825bc5cc4` |
-| `as_of_date` | `2026-08-02` |
+| `as_of_commit` | `f38b563502fa7e098f8420062c5b71f9fb231fdf` |
+| `as_of_date` | `2026-08-03` |
 | `current_branch` | `workbench/mainline-2026-07` |
-| `current_milestone` | `Project Memory v0.1 implementation candidate` |
-| `work_status` | `in_progress` |
-| `completed_scopes` | `[design, validation, closure]` |
-| `completed_closures` | `[Phase A, Phase B, Phase C, semantic_noop mechanism, SWP design, Project Memory v0.1 design]` |
-| `active_work` | `[Project Memory v0.1 implementation candidate]` |
-| `queued_work` | `[implementation validation, independent implementation review, implementation commit, post-commit validation]` |
+| `current_milestone` | `Project Memory v0.1 implementation closed` |
+| `work_status` | `completed` |
+| `completed_scopes` | `[design, implementation, validation, closure]` |
+| `completed_closures` | `[Phase A, Phase B, Phase C, semantic_noop mechanism, SWP design, Project Memory v0.1 design, Project Memory v0.1 implementation]` |
+| `active_work` | `[]` |
+| `queued_work` | `[]` |
 | `deferred_work` | `[Phase D archaeology, production validator implementation]` |
 | `blockers` | `[]` |
 | `known_dirty_exclusions` | See the exact repository-relative paths below. |
@@ -21,7 +21,7 @@
 
 ## Known dirty exclusions
 
-The following exact paths were outside this implementation candidate at its start and remain untouched:
+The following exact paths were outside the Project Memory v0.1 implementation candidate at its start and remain untouched by the implementation, closure, provenance-remediation, and state-refresh work:
 
 - `tests/test_codex_auto_routing.sh`
 - `tools/codex-auto.sh`
@@ -76,9 +76,12 @@ The following exact paths were outside this implementation candidate at its star
 - {path: reports/validation/artifacts/sunday_weekly_pipeline_v0.1_final_closure_2026-07-29/closure_manifest.json, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 467e8620ec0fd1815bca2de376bf4c365b3845ff0ed2f345afd15eb765523aae, role: SWP_design_closure_manifest}
 - {path: reports/validation/project_memory_v0.1_design_final_closure_2026-08-02.md, snapshot_kind: commit, snapshot_commit: d33a7cfd39a8608524096021ae581a6825bc5cc4, raw_sha256: c891f6c56d65d0dfd6fb4acfe377f48d408674e5830c244829128cb7b72faf7d, role: Project Memory v0.1 design closure}
 - {path: stock_workbench_index.md, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 2753045592485753f68df039e760ed0d5be8965075ffa6ce88cece92bab535db, role: current_business_navigation_index}
+- {path: reports/validation/project_memory_v0.1_implementation_final_closure_2026-08-02.md, snapshot_kind: commit, snapshot_commit: 844d8b541d7fd3165ce9e9a1725f207e1764da51, raw_sha256: e525781b932aeede6296419883880b712c75beb47b9f6f8072aedcf2b7018e6a, role: implementation_final_closure_report}
+- {path: reports/validation/artifacts/project_memory_v0.1_implementation_final_closure_2026-08-02/closure_manifest.json, snapshot_kind: commit, snapshot_commit: 844d8b541d7fd3165ce9e9a1725f207e1764da51, raw_sha256: da4b0f023a18dd136f4f7d398f66294a90fac0b536c9e64c03f1c145d507fbd6, role: implementation_closure_manifest}
+- {path: reports/validation/project_memory_v0.1_provenance_revalidation_2026-08-02.md, snapshot_kind: commit, snapshot_commit: f38b563502fa7e098f8420062c5b71f9fb231fdf, raw_sha256: a188c02337204fb279fd2adaef5f5da35bcd231a8d7613b9fd6af7fba26f8895, role: provenance_revalidation_report}
+- {path: reports/validation/artifacts/project_memory_v0.1_provenance_revalidation_2026-08-02/review_meta.json, snapshot_kind: commit, snapshot_commit: f38b563502fa7e098f8420062c5b71f9fb231fdf, raw_sha256: 8a8ca17c8021d12ab4ba0d1e488259ec1725479f972f5f03ef3307c124de4510, role: provenance_review_metadata}
 ```
 
 ## Interpretation boundary
 
-This state is an implementation candidate, not an implementation closure. It does not start a production validator, authorize Git actions, or change any source referenced above.
-
+Project Memory v0.1 implementation is closed and its implementation/closure provenance has been revalidated in isolation. Memory still grants no trading, Git, business-state, or review-verdict authority. The production validator remains deferred. Push still requires separate explicit user authorization.
