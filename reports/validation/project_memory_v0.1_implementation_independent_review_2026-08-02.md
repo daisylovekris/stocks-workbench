@@ -37,5 +37,4 @@ The raw model output is archived without rewriting its verdict. The structured m
 - The 13 Memory files and implementation-candidate validation report are unchanged by this archive step.
 - The source worktree remained unchanged during the independent review.
 - The review-time state was `staged=false`, `committed=false`, and `pushed=false`.
-- This review authorizes the scoped local implementation commit requested separately; it does not authorize push or declare implementation closure.
-
+- This review records readiness for the scoped local implementation commit authorized separately by the user; it does not itself authorize Git action, push, or implementation closure.
