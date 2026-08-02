@@ -1,0 +1,113 @@
+{
+  "schema_version": "project_memory_v0.1_provenance_revalidation_meta_v0.1",
+  "review_type": "isolated_implementation_and_closure_provenance_revalidation",
+  "created_at_utc": "2026-08-02T15:29:25Z",
+  "repository": ".",
+  "source_head": "844d8b541d7fd3165ce9e9a1725f207e1764da51",
+  "implementation_commit": "e1723c26efb76bee2aa2b879233a738f4e7e2323",
+  "closure_commit": "844d8b541d7fd3165ce9e9a1725f207e1764da51",
+  "implementation_package_sha256_expected": "53baa96909e9bf84550f46d28435565613d94cbeda7af9468f72a5b3fd168fed",
+  "runtime_identity": {
+    "cli": "codex-cli 0.145.0",
+    "thread_id": "019fc318-1d15-71d2-bcaa-996ff76c8298",
+    "turn_id": "019fc318-1d23-70b3-a1c0-c80be0abe2f3",
+    "actual_model": "gpt-5.5",
+    "reasoning_effort": "high",
+    "model_provider": "openai",
+    "service_tier": null,
+    "turn_status": "completed",
+    "turn_error": null,
+    "allow_provider_model_fallback": false
+  },
+  "isolation": {
+    "verified": true,
+    "temporary_home_initial_entry_count": 0,
+    "temporary_codex_home_initial_files": [
+      "auth.json"
+    ],
+    "user_config_present": false,
+    "repository_clone_head": "844d8b541d7fd3165ce9e9a1725f207e1764da51",
+    "repository_clone_index_empty": true,
+    "repository_directory_mode": "dr-xr-xr-x",
+    "sandbox": {
+      "type": "readOnly",
+      "networkAccess": false
+    },
+    "approval_policy": "never",
+    "ephemeral": true,
+    "rollout_path": null,
+    "history_persistence": "none",
+    "session_file_count": 0,
+    "instruction_sources": [],
+    "developer_instructions_override": "",
+    "base_instructions_override": null,
+    "prompt_templates_enabled": false,
+    "memory": {
+      "feature_enabled": false,
+      "generate_memories": false,
+      "use_memories": false,
+      "stage1_output_count": 0,
+      "memory_md_loaded": false
+    },
+    "skills": {
+      "bundled_enabled": false,
+      "include_instructions": false,
+      "skill_search_feature_enabled": false,
+      "installed_skill_file_count": 0
+    },
+    "plugins_enabled": false,
+    "remote_plugin_enabled": false,
+    "apps_enabled": false,
+    "multi_agent_enabled": false,
+    "dynamic_tools": [],
+    "historical_review_outputs_used_as_judgment_evidence": false
+  },
+  "runtime_evidence": {
+    "thread_start_metadata_sha256": "ba91b5aa533202e6a6a0aa6dd649accc68b4ec66f4c3cdd879c90a5eb7085905",
+    "appserver_event_log_sha256": "974ebaa6d7a18fa48c47d78bfdb971b6c14d205b73d2fe7fbd07c48bc32b7b1e",
+    "event_count": 1079,
+    "command_execution_count": 13,
+    "transient_validator_command_failure_count": 2,
+    "transient_validator_failures_adjudicated_as_findings": false,
+    "token_usage": {
+      "total_tokens": 25372,
+      "input_tokens": 24686,
+      "cached_input_tokens": 21888,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 686,
+      "reasoning_output_tokens": 456
+    }
+  },
+  "output": {
+    "path": "reports/validation/artifacts/project_memory_v0.1_provenance_revalidation_2026-08-02/gpt55_high_isolated_output.md",
+    "size_bytes": 711,
+    "sha256": "9df09a642651581db5647e048c082608c35ccae9eba30e995e558111d0d0b392",
+    "oai_mem_citation_block_count": 0,
+    "memory_md_reference_count": 0,
+    "embedded_foreign_rollout_id_count": 0
+  },
+  "historical_pollution": {
+    "implementation_raw": {
+      "path": "reports/validation/artifacts/project_memory_v0.1_implementation_independent_review_2026-08-02/gpt55_high_raw_output.md",
+      "size_bytes": 1358,
+      "sha256": "9b7167727a4d4b4732f09e890d0ca1e80bb74bb678c3f059f08ea32a24c1d6b7",
+      "oai_mem_citation_block_count": 1,
+      "memory_md_reference_count": 1,
+      "embedded_rollout_id_count": 2
+    },
+    "closure_raw": {
+      "path": "reports/validation/artifacts/project_memory_v0.1_implementation_closure_delta_review_2026-08-02/gpt55_high_raw_output.md",
+      "size_bytes": 1030,
+      "sha256": "e7fe894103e9d5a09e91932e248067b20b40281bc3aca74bb4f8564595dd7a24",
+      "oai_mem_citation_block_count": 1,
+      "memory_md_reference_count": 1,
+      "embedded_rollout_id_count": 2
+    }
+  },
+  "git_actions": {
+    "staged": false,
+    "committed": false,
+    "pushed": false,
+    "historical_commits_amended": false
+  }
+}
