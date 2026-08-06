@@ -27,6 +27,49 @@ except ModuleNotFoundError:  # pragma: no cover - direct execution fallback
 RUNNER_SCHEMA_VERSION = "runner_manifest_v0.2_phase_b"
 SHA_RE = re.compile(r"[0-9a-f]{64}")
 COMPLETION_ACTIONS = frozenset({"created", "identical_noop", "semantic_noop"})
+SEMANTIC_COMPARISON_MODES = frozenset(
+    {
+        oft.SEMANTIC_COMPARISON_V1_MODE,
+        oft.SEMANTIC_COMPARISON_V2_MODE,
+        oft.SEMANTIC_COMPARISON_V3_MODE,
+    }
+)
+_SEMANTIC_COMPARISON_KEYS = frozenset(
+    {
+        "comparison_mode",
+        "candidate_raw_sha256",
+        "official_raw_sha256",
+        "candidate_semantic_sha256",
+        "official_semantic_sha256",
+        "excluded_json_paths",
+        "excluded_values",
+        "semantic_equal",
+        "official_changed",
+    }
+)
+_V3_SEMANTIC_COMPARISON_KEYS = frozenset(
+    {
+        "comparison_mode",
+        "profile_version",
+        "profile_sha256",
+        "verification_method",
+        "required_paths",
+        "optional_paths",
+        "candidate_discovered_paths",
+        "official_discovered_paths",
+        "candidate_missing_required_paths",
+        "official_missing_required_paths",
+        "candidate_extra_paths",
+        "official_extra_paths",
+        "all_values_valid_timezone_datetime",
+        "candidate_raw_sha256",
+        "official_raw_sha256",
+        "candidate_semantic_sha256",
+        "official_semantic_sha256",
+        "semantic_equal",
+        "official_changed",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -271,26 +314,13 @@ def validate_completion_manifest(
             raise CompletionValidationError("completion_identical_evidence_invalid", "identical_noop SHA or byte evidence is inconsistent")
     else:
         comparison = manifest.get("comparison")
-        required_comparison = {
-            "comparison_mode",
-            "candidate_raw_sha256",
-            "official_raw_sha256",
-            "candidate_semantic_sha256",
-            "official_semantic_sha256",
-            "excluded_json_paths",
-            "excluded_values",
-            "semantic_equal",
-            "official_changed",
-        }
         if (
             manifest.get("official_exists_before") is not True
             or manifest.get("official_bytes_equal_candidate") is not False
             or before_sha != after_sha
             or candidate_sha == after_sha
             or not isinstance(comparison, dict)
-            or set(comparison) != required_comparison
-            or comparison.get("comparison_mode") != oft.SEMANTIC_COMPARISON_MODE
-            or comparison.get("excluded_json_paths") != list(oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
+            or comparison.get("comparison_mode") not in SEMANTIC_COMPARISON_MODES
             or comparison.get("candidate_raw_sha256") != candidate_sha
             or comparison.get("official_raw_sha256") != after_sha
             or comparison.get("semantic_equal") is not True
@@ -300,6 +330,58 @@ def validate_completion_manifest(
             or SHA_RE.fullmatch(comparison.get("candidate_semantic_sha256")) is None
         ):
             raise CompletionValidationError("completion_semantic_evidence_invalid", "semantic_noop evidence is incomplete or inconsistent")
+        comparison_mode = comparison.get("comparison_mode")
+        if comparison_mode == oft.SEMANTIC_COMPARISON_V1_MODE:
+            if (
+                set(comparison) != _SEMANTIC_COMPARISON_KEYS
+                or comparison.get("excluded_json_paths") != list(oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
+            ):
+                raise CompletionValidationError(
+                    "completion_semantic_evidence_invalid",
+                    "v1 semantic_noop excluded paths are not the fixed approved whitelist",
+                )
+        elif comparison_mode == oft.SEMANTIC_COMPARISON_V2_MODE:
+            excluded_values = comparison.get("excluded_values")
+            if (
+                set(comparison) != _SEMANTIC_COMPARISON_KEYS
+                or not isinstance(excluded_values, dict)
+                or not isinstance(comparison.get("excluded_json_paths"), list)
+                or comparison.get("excluded_json_paths") != excluded_values.get("candidate_paths")
+                or comparison.get("excluded_json_paths") != excluded_values.get("official_paths")
+                or excluded_values.get("path_sets_equal") is not True
+                or excluded_values.get("required_paths_present") is not True
+            ):
+                raise CompletionValidationError(
+                    "completion_semantic_evidence_invalid",
+                    "v2 semantic_noop symmetric timestamp paths are inconsistent",
+                )
+        elif comparison_mode == oft.SEMANTIC_COMPARISON_V3_MODE:
+            try:
+                profile_config, _entry = oft.resolve_profile_for_version(comparison.get("profile_version"))
+            except ValueError as exc:
+                raise CompletionValidationError(
+                    "completion_semantic_evidence_invalid",
+                    str(exc),
+                ) from exc
+            profile = profile_config.profiles.get(comparison.get("verification_method"))
+            if (
+                set(comparison) != _V3_SEMANTIC_COMPARISON_KEYS
+                or comparison.get("profile_version") != profile_config.profile_version
+                or comparison.get("profile_sha256") != profile_config.sha256
+                or profile is None
+                or profile.get("profile_status") != "active"
+                or comparison.get("required_paths") != list(profile["required_paths"])
+                or comparison.get("optional_paths") != list(profile["optional_paths"])
+            ):
+                raise CompletionValidationError(
+                    "completion_semantic_evidence_invalid",
+                    "v3 semantic_noop profile identity is inconsistent",
+                )
+        else:
+            raise CompletionValidationError(
+                "completion_semantic_evidence_invalid",
+                "semantic_noop comparison mode is unknown",
+            )
         recomputed = oft.build_semantic_comparison(
             candidate=candidate,
             official=official,
@@ -307,6 +389,8 @@ def validate_completion_manifest(
             official_bytes=official_bytes,
             symbol=symbol,
             target_date=target_date,
+            comparison_mode=comparison_mode,
+            profile_version=comparison.get("profile_version"),
         )
         if recomputed.get("semantic_equal") is not True or comparison != recomputed:
             raise CompletionValidationError("completion_semantic_recompute_mismatch", "live semantic comparison differs from manifest evidence")

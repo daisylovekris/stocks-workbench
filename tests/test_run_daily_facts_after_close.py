@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import os
 import subprocess
@@ -170,12 +171,178 @@ def semantic_timestamp_pair(*, status: str = "success") -> tuple[dict, dict]:
     return official, candidate
 
 
+def historical_semantic_timestamp_pair() -> tuple[dict, dict]:
+    """Replicate the 2026-07-27 official facts volume-ratio structure.
+
+    The historical method carries exactly seven timestamp leaves and no
+    ``snapshot_ohlc_check``: generated_at, quote_verification.fetched_at,
+    run.fetched_at, volume_ratio.five_day_volume_check.fetched_at,
+    volume_ratio.source_volume_checks.{sohu_history,tencent_history}.fetched_at,
+    and volume_ratio.verification.fetched_at.
+    """
+
+    official = eligible_official_candidate(status="partial")
+    official["trade_date"] = "2026-07-27"
+    official["generated_at"] = "2026-08-02T20:20:20Z"
+    official["quote_verification"]["source_date"] = "2026-07-27"
+    official["quote_verification"]["fetched_at"] = "2026-08-02T20:20:19Z"
+    official["run"]["fetched_at"] = "2026-08-02T20:20:19Z"
+    trade_dates = [
+        "2026-07-20",
+        "2026-07-21",
+        "2026-07-22",
+        "2026-07-23",
+        "2026-07-24",
+        "2026-07-27",
+    ]
+    volumes = [659284.0, 670682.0, 847182.0, 930068.0, 550996.0, 407188.0]
+    six_day = {
+        "status": "passed",
+        "trade_dates": trade_dates,
+        "volumes": volumes,
+        "target_volume": 407188.0,
+        "calculated_value": 0.56,
+        "expected_value": 0.56,
+        "tolerance": 0.01,
+        "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+    }
+    official["volume_ratio"] = {
+        "candidate_value": 0.56,
+        "confirmed_value": 0.56,
+        "source": "sohu_five_day_volume+tencent_five_day_volume",
+        "cross_check": {
+            "value": 0.56,
+            "source": "tencent_five_day_volume_derived",
+            "source_date": "2026-07-27",
+            "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+            "tolerance": 0.01,
+            "delta": 0.0,
+        },
+        "five_day_volume_check": {
+            **six_day,
+            "source": "tencent_history",
+            "fetched_at": "2026-08-02T20:20:20Z",
+        },
+        "source_volume_checks": {
+            "sohu_history": {
+                **six_day,
+                "source": "sohu_history",
+                "fetched_at": "2026-08-02T20:20:20Z",
+            },
+            "tencent_history": {
+                **six_day,
+                "source": "tencent_history",
+                "fetched_at": "2026-08-02T20:20:20Z",
+            },
+        },
+        "verification": {
+            "status": "confirmed",
+            "method": "historical_five_day_volume_cross_check",
+            "confirmed_by": "automation_cross_check",
+            "source": "sohu_five_day_volume+tencent_five_day_volume",
+            "source_date": "2026-07-27",
+            "fetched_at": "2026-08-02T20:20:20Z",
+            "notes": (
+                "historical volume ratio confirmed from Sohu and Tencent daily volume; "
+                "amount-based ratios are not accepted"
+            ),
+            "error_type": None,
+            "error_message": None,
+        },
+    }
+    candidate = copy.deepcopy(official)
+    candidate["generated_at"] = "2026-08-02T22:09:19Z"
+    candidate["quote_verification"]["fetched_at"] = "2026-08-02T22:09:18Z"
+    candidate["run"]["fetched_at"] = "2026-08-02T22:09:18Z"
+    candidate["volume_ratio"]["five_day_volume_check"]["fetched_at"] = "2026-08-02T22:09:19Z"
+    candidate["volume_ratio"]["source_volume_checks"]["sohu_history"]["fetched_at"] = "2026-08-02T22:09:19Z"
+    candidate["volume_ratio"]["source_volume_checks"]["tencent_history"]["fetched_at"] = "2026-08-02T22:09:19Z"
+    candidate["volume_ratio"]["verification"]["fetched_at"] = "2026-08-02T22:09:19Z"
+    return official, candidate
+
+
+def historical_calendar(path: Path) -> Path:
+    return write_calendar(
+        path,
+        trading_days=[
+            "2026-07-20",
+            "2026-07-21",
+            "2026-07-22",
+            "2026-07-23",
+            "2026-07-24",
+            "2026-07-27",
+        ],
+    )
+
+
+SAME_DAY_TIMESTAMP_PATHS = [
+    "generated_at",
+    "quote_verification.fetched_at",
+    "run.fetched_at",
+    "volume_ratio.five_day_volume_check.fetched_at",
+    "volume_ratio.snapshot_ohlc_check.fetched_at",
+    "volume_ratio.verification.fetched_at",
+]
+
+
+def same_day_facts_pair_07_24() -> tuple[dict, dict]:
+    """Real same-day facts pair derived from the tracked 2026-07-24 official file.
+
+    The tracked file carries ``verification.method =
+    same_day_snapshot_plus_sohu_five_day_cross_check`` and exactly the six
+    same-day profile timestamp paths.
+    """
+
+    official = json.loads(Path("data/daily/300274_2026-07-24_facts.json").read_text(encoding="utf-8"))
+    candidate = copy.deepcopy(official)
+    for path in SAME_DAY_TIMESTAMP_PATHS:
+        current = candidate
+        parts = path.split(".")
+        for part in parts[:-1]:
+            current = current[part]
+        current[parts[-1]] = "2026-08-03T00:00:00Z"
+    return official, candidate
+
+
+def same_day_calendar(path: Path) -> Path:
+    return write_calendar(
+        path,
+        trading_days=[
+            "2026-07-17",
+            "2026-07-20",
+            "2026-07-21",
+            "2026-07-22",
+            "2026-07-23",
+            "2026-07-24",
+        ],
+    )
+
+
+HISTORICAL_TIMESTAMP_PATHS = [
+    "generated_at",
+    "quote_verification.fetched_at",
+    "run.fetched_at",
+    "volume_ratio.five_day_volume_check.fetched_at",
+    "volume_ratio.source_volume_checks.sohu_history.fetched_at",
+    "volume_ratio.source_volume_checks.tencent_history.fetched_at",
+    "volume_ratio.verification.fetched_at",
+]
+
+
 def set_json_path(payload: dict, path: str, value) -> None:
     current = payload
     parts = path.split(".")
     for part in parts[:-1]:
         current = current[part]
     current[parts[-1]] = value
+
+
+def delete_json_path(payload: dict, path: str) -> None:
+    current = payload
+    parts = path.split(".")
+    for part in parts[:-1]:
+        current = current[part]
+    del current[parts[-1]]
 
 
 def marker_for(candidate: dict) -> str:
@@ -1135,15 +1302,15 @@ def test_write_official_existing_identical_is_noop_and_completed(tmp_path, monke
     assert len(calls) == 1
 
 
-def test_write_official_only_approved_timestamps_differ_is_semantic_noop(tmp_path, monkeypatch):
-    calendar = write_calendar(tmp_path / "calendar.json")
+def test_write_official_same_day_profile_semantic_noop(tmp_path, monkeypatch):
+    calendar = same_day_calendar(tmp_path / "calendar.json")
     repo = install_temp_repo_root(monkeypatch, tmp_path)
-    official_payload, candidate = semantic_timestamp_pair()
-    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
     official.write_bytes(runner._json_payload(official_payload))
     before = official.read_bytes()
     before_sha = runner.sha256_bytes(before)
-    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
+    calls = patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
 
     args = parse_write_args(
         tmp_path,
@@ -1151,7 +1318,7 @@ def test_write_official_only_approved_timestamps_differ_is_semantic_noop(tmp_pat
         "--mode",
         "historical_backfill",
         "--date",
-        "2026-07-16",
+        "2026-07-24",
         "--reason",
         "controlled replay",
     )
@@ -1166,13 +1333,22 @@ def test_write_official_only_approved_timestamps_differ_is_semantic_noop(tmp_pat
     assert saved["official_changed"] is False
     assert saved["official_bytes_equal_candidate"] is False
     assert official.read_bytes() == before
-    assert comparison["comparison_mode"] == runner.oft.SEMANTIC_COMPARISON_MODE
-    assert comparison["excluded_json_paths"] == list(runner.oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
+    profile_config = runner.oft.load_method_profile_config()
+    assert comparison["comparison_mode"] == runner.oft.SEMANTIC_COMPARISON_V3_MODE
+    assert comparison["profile_version"] == profile_config.profile_version
+    assert comparison["profile_sha256"] == profile_config.sha256
+    assert comparison["verification_method"] == "same_day_snapshot_plus_sohu_five_day_cross_check"
+    assert comparison["required_paths"] == SAME_DAY_TIMESTAMP_PATHS
+    assert comparison["optional_paths"] == []
+    assert comparison["candidate_discovered_paths"] == SAME_DAY_TIMESTAMP_PATHS
+    assert comparison["official_discovered_paths"] == SAME_DAY_TIMESTAMP_PATHS
+    assert comparison["candidate_missing_required_paths"] == []
+    assert comparison["official_missing_required_paths"] == []
+    assert comparison["candidate_extra_paths"] == []
+    assert comparison["official_extra_paths"] == []
+    assert comparison["all_values_valid_timezone_datetime"] is True
     assert comparison["candidate_raw_sha256"] != comparison["official_raw_sha256"]
     assert comparison["candidate_semantic_sha256"] == comparison["official_semantic_sha256"]
-    assert comparison["excluded_values"]["all_paths_present"] is True
-    assert comparison["excluded_values"]["all_strings"] is True
-    assert comparison["excluded_values"]["all_valid_iso_datetime"] is True
     assert comparison["semantic_equal"] is True
     assert runner.sha256_bytes(official.read_bytes()) == before_sha
     assert len(calls) == 1
@@ -1239,20 +1415,24 @@ def _mutate_semantic_completion(case, saved, official):
             candidate_bytes=candidate_path.read_bytes(),
             official_bytes=official.read_bytes(),
             symbol="300274",
-            target_date="2026-07-16",
+            target_date="2026-07-24",
         )
     elif case == "semantic_sha_differ":
         payload["comparison"]["candidate_semantic_sha256"] = "0" * 64
     elif case == "excluded_paths_missing":
-        payload["comparison"]["excluded_json_paths"] = payload["comparison"]["excluded_json_paths"][:-1]
+        payload["comparison"]["candidate_discovered_paths"] = payload["comparison"]["candidate_discovered_paths"][:-1]
     elif case == "excluded_paths_extra":
-        payload["comparison"]["excluded_json_paths"].append("quote.close")
+        payload["comparison"]["candidate_discovered_paths"].append("quote.close")
     elif case == "excluded_paths_order":
-        payload["comparison"]["excluded_json_paths"] = list(
-            reversed(payload["comparison"]["excluded_json_paths"])
+        payload["comparison"]["candidate_discovered_paths"] = list(
+            reversed(payload["comparison"]["candidate_discovered_paths"])
         )
     elif case == "excluded_paths_content":
-        payload["comparison"]["excluded_json_paths"][0] = "quote.close"
+        payload["comparison"]["candidate_discovered_paths"][0] = "quote.close"
+    elif case == "profile_sha256_tampered":
+        payload["comparison"]["profile_sha256"] = "0" * 64
+    elif case == "verification_method_tampered":
+        payload["comparison"]["verification_method"] = "historical_five_day_volume_cross_check"
     elif case == "stage_running":
         payload["stage"] = "running"
     elif case == "write_official_false":
@@ -1294,6 +1474,8 @@ def _mutate_semantic_completion(case, saved, official):
         "excluded_paths_extra",
         "excluded_paths_order",
         "excluded_paths_content",
+        "profile_sha256_tampered",
+        "verification_method_tampered",
         "stage_running",
         "write_official_false",
         "dry_run_true",
@@ -1304,20 +1486,20 @@ def _mutate_semantic_completion(case, saved, official):
     ],
 )
 def test_invalid_semantic_completion_is_diagnosed_and_generator_reruns(tmp_path, monkeypatch, case):
-    calendar = write_calendar(tmp_path / "calendar.json")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
     repo = install_temp_repo_root(monkeypatch, tmp_path)
-    official_payload, candidate = semantic_timestamp_pair()
-    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
     official.write_bytes(runner._json_payload(official_payload))
     protected_official = official.read_bytes()
-    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
+    calls = patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
     args = parse_write_args(
         tmp_path,
         calendar,
         "--mode",
         "historical_backfill",
         "--date",
-        "2026-07-16",
+        "2026-07-24",
         "--reason",
         "completion corruption regression",
     )
@@ -1341,13 +1523,13 @@ def test_invalid_semantic_completion_is_diagnosed_and_generator_reruns(tmp_path,
 
 
 def test_semantic_noop_bundle_failure_rerun_converges(tmp_path, monkeypatch):
-    calendar = write_calendar(tmp_path / "calendar.json")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
     repo = install_temp_repo_root(monkeypatch, tmp_path)
-    official_payload, candidate = semantic_timestamp_pair()
-    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
     official.write_bytes(runner._json_payload(official_payload))
     protected_official = official.read_bytes()
-    calls = patch_generator(monkeypatch, stdout=marker_for(candidate))
+    calls = patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
     original_build_context = runner.build_context
     build_count = 0
 
@@ -1366,7 +1548,7 @@ def test_semantic_noop_bundle_failure_rerun_converges(tmp_path, monkeypatch):
         "--mode",
         "historical_backfill",
         "--date",
-        "2026-07-16",
+        "2026-07-24",
         "--reason",
         "bundle failure convergence",
     )
@@ -1384,11 +1566,11 @@ def test_semantic_noop_bundle_failure_rerun_converges(tmp_path, monkeypatch):
             runtime_dir=tmp_path / "phase-c-failed-bundle",
             runner_runtime_dir=tmp_path / "runtime",
             symbol="300274",
-            trade_date="2026-07-16",
+            trade_date="2026-07-24",
             runner_manifest_path=Path(first["manifest_path"]),
             repo_root=repo,
             official_lock_dir=tmp_path / "phase-c-failed-locks",
-            now=lambda: datetime(2026, 7, 16, 16, 31, tzinfo=ZoneInfo("Asia/Shanghai")),
+            now=lambda: datetime(2026, 7, 24, 16, 31, tzinfo=ZoneInfo("Asia/Shanghai")),
         )
     )
     failed_review_payload = json.loads(failed_review.manifest_path.read_text(encoding="utf-8"))
@@ -1431,14 +1613,14 @@ def test_completion_scan_runs_while_runner_lock_is_held(tmp_path, monkeypatch):
 
 
 def test_phase_b_semantic_noop_manifest_is_accepted_by_phase_c_with_real_validator(tmp_path, monkeypatch):
-    calendar = write_calendar(tmp_path / "calendar.json")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
     repo = install_temp_repo_root(monkeypatch, tmp_path)
-    official_payload, candidate = semantic_timestamp_pair()
-    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
     official.write_bytes(runner._json_payload(official_payload))
     before = official.read_bytes()
     before_sha = runner.sha256_bytes(before)
-    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
 
     code, manifest = runner.execute(
         parse_write_args(
@@ -1447,7 +1629,7 @@ def test_phase_b_semantic_noop_manifest_is_accepted_by_phase_c_with_real_validat
             "--mode",
             "historical_backfill",
             "--date",
-            "2026-07-16",
+            "2026-07-24",
             "--reason",
             "cross-stage semantic noop integration",
         )
@@ -1465,11 +1647,11 @@ def test_phase_b_semantic_noop_manifest_is_accepted_by_phase_c_with_real_validat
             runtime_dir=tmp_path / "phase-c-runtime",
             runner_runtime_dir=tmp_path / "runtime",
             symbol="300274",
-            trade_date="2026-07-16",
+            trade_date="2026-07-24",
             runner_manifest_path=Path(saved["manifest_path"]),
             repo_root=repo,
             official_lock_dir=tmp_path / "phase-c-locks",
-            now=lambda: datetime(2026, 7, 16, 16, 30, tzinfo=ZoneInfo("Asia/Shanghai")),
+            now=lambda: datetime(2026, 7, 24, 16, 30, tzinfo=ZoneInfo("Asia/Shanghai")),
         )
     )
     review = json.loads(result.manifest_path.read_text(encoding="utf-8"))
@@ -1482,14 +1664,14 @@ def test_phase_b_semantic_noop_manifest_is_accepted_by_phase_c_with_real_validat
 
 
 def test_write_official_schema_version_difference_is_not_semantic_noop(tmp_path, monkeypatch):
-    calendar = write_calendar(tmp_path / "calendar.json")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
     repo = install_temp_repo_root(monkeypatch, tmp_path)
-    official_payload, candidate = semantic_timestamp_pair()
+    official_payload, candidate = same_day_facts_pair_07_24()
     official_payload["schema_version"] = "facts_pack_v0.1"
-    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
     official.write_bytes(runner._json_payload(official_payload))
     before = official.read_bytes()
-    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
 
     code, manifest = runner.execute(
         parse_write_args(
@@ -1498,7 +1680,7 @@ def test_write_official_schema_version_difference_is_not_semantic_noop(tmp_path,
             "--mode",
             "historical_backfill",
             "--date",
-            "2026-07-16",
+            "2026-07-24",
             "--reason",
             "schema mismatch replay",
         )
@@ -1518,15 +1700,15 @@ def test_write_official_any_approved_timestamp_without_timezone_is_rejected(
     side,
     path,
 ):
-    calendar = write_calendar(tmp_path / "calendar.json")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
     repo = install_temp_repo_root(monkeypatch, tmp_path)
-    official_payload, candidate = semantic_timestamp_pair()
+    official_payload, candidate = same_day_facts_pair_07_24()
     target = candidate if side == "candidate" else official_payload
     set_json_path(target, path, "2026-07-16T09:00:00")
-    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
     official.write_bytes(runner._json_payload(official_payload))
     before = official.read_bytes()
-    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
 
     code, manifest = runner.execute(
         parse_write_args(
@@ -1535,7 +1717,7 @@ def test_write_official_any_approved_timestamp_without_timezone_is_rejected(
             "--mode",
             "historical_backfill",
             "--date",
-            "2026-07-16",
+            "2026-07-24",
             "--reason",
             "timezone rejection replay",
         )
@@ -1543,7 +1725,7 @@ def test_write_official_any_approved_timestamp_without_timezone_is_rejected(
     saved = load_manifest(manifest)
     assert code == 2
     assert saved["write_action"] == "conflict_blocked"
-    assert saved["comparison"]["excluded_values"]["all_valid_iso_datetime"] is False
+    assert saved["comparison"]["all_values_valid_timezone_datetime"] is False
     assert official.read_bytes() == before
 
 
@@ -1556,18 +1738,18 @@ def test_write_official_any_approved_timestamp_without_timezone_is_rejected(
     ],
 )
 def test_write_official_deleted_business_field_is_conflict(tmp_path, monkeypatch, path):
-    calendar = write_calendar(tmp_path / "calendar.json")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
     repo = install_temp_repo_root(monkeypatch, tmp_path)
-    official_payload, candidate = semantic_timestamp_pair()
+    official_payload, candidate = same_day_facts_pair_07_24()
     parent, key = path.rsplit(".", 1)
     current = candidate
     for part in parent.split("."):
         current = current[part]
     del current[key]
-    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
     official.write_bytes(runner._json_payload(official_payload))
     before = official.read_bytes()
-    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
 
     code, manifest = runner.execute(
         parse_write_args(
@@ -1576,7 +1758,7 @@ def test_write_official_deleted_business_field_is_conflict(tmp_path, monkeypatch
             "--mode",
             "historical_backfill",
             "--date",
-            "2026-07-16",
+            "2026-07-24",
             "--reason",
             "business field deletion replay",
         )
@@ -1595,20 +1777,20 @@ def test_write_official_deleted_business_field_is_conflict(tmp_path, monkeypatch
         ("quote.high", 999.0),
         ("quote.amount", 999999.0),
         ("quote.turnover_rate", 9.9),
-        ("volume_ratio.confirmed_value", 9.9),
+        ("name", "changed official name"),
         ("missing.market_indices", "changed"),
-        ("needs_manual_check.market_indices", True),
+        ("needs_manual_check.market_indices", False),
     ],
 )
 def test_write_official_business_change_remains_conflict(tmp_path, monkeypatch, path, value):
-    calendar = write_calendar(tmp_path / "calendar.json")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
     repo = install_temp_repo_root(monkeypatch, tmp_path)
-    official_payload, candidate = semantic_timestamp_pair()
+    official_payload, candidate = same_day_facts_pair_07_24()
     set_json_path(candidate, path, value)
-    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
     official.write_bytes(runner._json_payload(official_payload))
     before = official.read_bytes()
-    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
 
     code, manifest = runner.execute(
         parse_write_args(
@@ -1617,7 +1799,7 @@ def test_write_official_business_change_remains_conflict(tmp_path, monkeypatch, 
             "--mode",
             "historical_backfill",
             "--date",
-            "2026-07-16",
+            "2026-07-24",
             "--reason",
             "controlled replay",
         )
@@ -1633,13 +1815,13 @@ def test_write_official_business_change_remains_conflict(tmp_path, monkeypatch, 
 
 
 def test_write_official_unknown_field_remains_conflict(tmp_path, monkeypatch):
-    calendar = write_calendar(tmp_path / "calendar.json")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
     repo = install_temp_repo_root(monkeypatch, tmp_path)
-    official_payload, candidate = semantic_timestamp_pair()
+    official_payload, candidate = same_day_facts_pair_07_24()
     candidate["unknown_business_field"] = "must-not-be-ignored"
-    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
     official.write_bytes(runner._json_payload(official_payload))
-    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
 
     code, manifest = runner.execute(
         parse_write_args(
@@ -1648,7 +1830,7 @@ def test_write_official_unknown_field_remains_conflict(tmp_path, monkeypatch):
             "--mode",
             "historical_backfill",
             "--date",
-            "2026-07-16",
+            "2026-07-24",
             "--reason",
             "controlled replay",
         )
@@ -1660,10 +1842,10 @@ def test_write_official_unknown_field_remains_conflict(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     ("mutation", "expected_check"),
     [
-        ("approved_path_missing", "all_paths_present"),
-        ("timestamp_wrong_type", "all_strings"),
-        ("timestamp_invalid", "all_valid_iso_datetime"),
-        ("non_whitelist_fetched_at", "semantic_equal"),
+        ("candidate_timestamp_leaf_missing", "candidate_missing_required_paths"),
+        ("candidate_extra_timestamp_leaf", "candidate_extra_paths"),
+        ("timestamp_wrong_type", "all_values_valid_timezone_datetime"),
+        ("timestamp_invalid", "all_values_valid_timezone_datetime"),
     ],
 )
 def test_write_official_invalid_semantic_evidence_remains_conflict(
@@ -1672,21 +1854,20 @@ def test_write_official_invalid_semantic_evidence_remains_conflict(
     mutation,
     expected_check,
 ):
-    calendar = write_calendar(tmp_path / "calendar.json")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
     repo = install_temp_repo_root(monkeypatch, tmp_path)
-    official_payload, candidate = semantic_timestamp_pair()
-    if mutation == "approved_path_missing":
+    official_payload, candidate = same_day_facts_pair_07_24()
+    if mutation == "candidate_timestamp_leaf_missing":
         del candidate["volume_ratio"]["snapshot_ohlc_check"]["fetched_at"]
+    elif mutation == "candidate_extra_timestamp_leaf":
+        candidate["volume_ratio"]["extra_check"] = {"fetched_at": "2026-07-16T09:00:06Z"}
     elif mutation == "timestamp_wrong_type":
         candidate["run"]["fetched_at"] = 123
     elif mutation == "timestamp_invalid":
         candidate["generated_at"] = "not-a-timestamp"
-    else:
-        official_payload["volume_ratio"]["extra_check"] = {"fetched_at": "2026-07-16T08:00:06Z"}
-        candidate["volume_ratio"]["extra_check"] = {"fetched_at": "2026-07-16T09:00:06Z"}
-    official = repo / "data" / "daily" / "300274_2026-07-16_facts.json"
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
     official.write_bytes(runner._json_payload(official_payload))
-    patch_generator(monkeypatch, stdout=marker_for(candidate))
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
 
     code, manifest = runner.execute(
         parse_write_args(
@@ -1695,7 +1876,7 @@ def test_write_official_invalid_semantic_evidence_remains_conflict(
             "--mode",
             "historical_backfill",
             "--date",
-            "2026-07-16",
+            "2026-07-24",
             "--reason",
             "controlled replay",
         )
@@ -1703,11 +1884,924 @@ def test_write_official_invalid_semantic_evidence_remains_conflict(
     saved = load_manifest(manifest)
     assert code == 2
     assert saved["write_action"] == "conflict_blocked"
-    assert saved["comparison"]["excluded_json_paths"] == list(runner.oft.SEMANTIC_NOOP_EXCLUDED_JSON_PATHS)
-    if expected_check == "semantic_equal":
-        assert saved["comparison"]["semantic_equal"] is False
+    assert saved["comparison"]["semantic_equal"] is False
+    if expected_check == "all_values_valid_timezone_datetime":
+        assert saved["comparison"][expected_check] is False
     else:
-        assert saved["comparison"]["excluded_values"][expected_check] is False
+        assert len(saved["comparison"][expected_check]) > 0
+
+
+def test_historical_semantic_noop_07_27_structure(tmp_path, monkeypatch):
+    calendar = historical_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = historical_semantic_timestamp_pair()
+    official = repo / "data" / "daily" / "300274_2026-07-27_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    calls = patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-27",
+        "--reason",
+        "historical semantic noop replay",
+    )
+
+    code, manifest = runner.execute(args)
+
+    saved = load_manifest(manifest)
+    comparison = saved["comparison"]
+    assert code == 0
+    assert saved["write_action"] == "semantic_noop"
+    assert saved["reason_code"] == "official_semantically_identical"
+    assert official.read_bytes() == before
+    assert "snapshot_ohlc_check" not in candidate["volume_ratio"]
+    profile_config = runner.oft.load_method_profile_config()
+    assert comparison["comparison_mode"] == runner.oft.SEMANTIC_COMPARISON_V3_MODE
+    assert comparison["profile_version"] == profile_config.profile_version
+    assert comparison["profile_sha256"] == profile_config.sha256
+    assert comparison["verification_method"] == "historical_five_day_volume_cross_check"
+    assert comparison["required_paths"] == HISTORICAL_TIMESTAMP_PATHS
+    assert comparison["optional_paths"] == []
+    assert comparison["candidate_discovered_paths"] == HISTORICAL_TIMESTAMP_PATHS
+    assert comparison["official_discovered_paths"] == HISTORICAL_TIMESTAMP_PATHS
+    assert comparison["candidate_missing_required_paths"] == []
+    assert comparison["official_missing_required_paths"] == []
+    assert comparison["candidate_extra_paths"] == []
+    assert comparison["official_extra_paths"] == []
+    assert comparison["all_values_valid_timezone_datetime"] is True
+    assert comparison["candidate_semantic_sha256"] == comparison["official_semantic_sha256"]
+    assert comparison["semantic_equal"] is True
+    assert len(calls) == 1
+
+
+def test_symmetric_extra_timestamp_leaf_is_blocked_by_v3(tmp_path, monkeypatch):
+    calendar = same_day_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official_payload["volume_ratio"]["extra_check"] = {"fetched_at": "2026-07-24T08:00:06Z"}
+    candidate["volume_ratio"]["extra_check"] = {"fetched_at": "2026-07-24T09:00:06Z"}
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-24",
+            "--reason",
+            "symmetric extra timestamp replay",
+        )
+    )
+    saved = load_manifest(manifest)
+    comparison = saved["comparison"]
+    assert code == 2
+    assert saved["write_action"] == "conflict_blocked"
+    assert comparison["semantic_equal"] is False
+    assert comparison["candidate_semantic_sha256"] is None
+    assert "volume_ratio.extra_check.fetched_at" in comparison["candidate_extra_paths"]
+    assert "volume_ratio.extra_check.fetched_at" in comparison["official_extra_paths"]
+    assert official.read_bytes() == before
+
+
+def test_historical_semantic_noop_accepted_by_phase_c(tmp_path, monkeypatch):
+    calendar = historical_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = historical_semantic_timestamp_pair()
+    official = repo / "data" / "daily" / "300274_2026-07-27_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-27",
+            "--reason",
+            "cross-stage historical semantic noop",
+        )
+    )
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["write_action"] == "semantic_noop"
+
+    result = phase_c.generate_review(
+        phase_c.ReviewOptions(
+            runtime_dir=tmp_path / "phase-c-runtime",
+            runner_runtime_dir=tmp_path / "runtime",
+            symbol="300274",
+            trade_date="2026-07-27",
+            runner_manifest_path=Path(saved["manifest_path"]),
+            repo_root=repo,
+            official_lock_dir=tmp_path / "phase-c-locks",
+            now=lambda: datetime(2026, 8, 2, 16, 30, tzinfo=ZoneInfo("Asia/Shanghai")),
+        )
+    )
+    review = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert result.status == "review_created"
+    assert review["artifact_type"] == "facts_review"
+    assert review["write_action"] == "semantic_noop"
+    assert review["evidence_summary"]["semantic_comparison"] == saved["comparison"]
+    assert official.read_bytes() == before
+
+
+def test_v1_legacy_phase_b_manifest_still_completes(tmp_path, monkeypatch):
+    calendar = same_day_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    calls = patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-24",
+        "--reason",
+        "v1 legacy replay",
+    )
+
+    code, manifest = runner.execute(args)
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["write_action"] == "semantic_noop"
+
+    manifest_path = Path(saved["manifest_path"])
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    candidate_bytes = Path(payload["candidate_path"]).read_bytes()
+    official_bytes = official.read_bytes()
+    payload["comparison"] = runner.oft.build_semantic_comparison(
+        candidate=json.loads(candidate_bytes.decode("utf-8")),
+        official=json.loads(official_bytes.decode("utf-8")),
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol="300274",
+        target_date="2026-07-24",
+        comparison_mode=runner.oft.SEMANTIC_COMPARISON_V1_MODE,
+    )
+    assert payload["comparison"]["comparison_mode"] == runner.oft.SEMANTIC_COMPARISON_V1_MODE
+    assert payload["comparison"]["semantic_equal"] is True
+    manifest_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    rerun_code, rerun_manifest = runner.execute(args)
+    rerun = load_manifest(rerun_manifest)
+    assert rerun_code == 0
+    assert rerun["reason_code"] == "already_completed"
+    assert len(calls) == 1
+    assert official.read_bytes() == before
+
+
+def test_v1_legacy_phase_b_manifest_tampered_rejected(tmp_path, monkeypatch):
+    calendar = same_day_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    calls = patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-24",
+        "--reason",
+        "v1 legacy tamper replay",
+    )
+
+    code, manifest = runner.execute(args)
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["write_action"] == "semantic_noop"
+
+    manifest_path = Path(saved["manifest_path"])
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["comparison"] = runner.oft.build_semantic_comparison(
+        candidate=json.loads(Path(payload["candidate_path"]).read_bytes().decode("utf-8")),
+        official=json.loads(official.read_bytes().decode("utf-8")),
+        candidate_bytes=Path(payload["candidate_path"]).read_bytes(),
+        official_bytes=official.read_bytes(),
+        symbol="300274",
+        target_date="2026-07-24",
+        comparison_mode=runner.oft.SEMANTIC_COMPARISON_V1_MODE,
+    )
+    payload["comparison"]["candidate_semantic_sha256"] = "0" * 64
+    manifest_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    rerun_code, rerun_manifest = runner.execute(args)
+    rerun = load_manifest(rerun_manifest)
+    assert rerun_code == 0
+    assert rerun["reason_code"] != "already_completed"
+    assert len(calls) == 2
+    assert any(
+        item["path"] == saved["manifest_path"] and item["reason"].startswith("completion invalid:")
+        for item in rerun["scan_diagnostics"]
+    )
+
+
+def test_v2_legacy_phase_b_manifest_still_completes(tmp_path, monkeypatch):
+    calendar = same_day_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    calls = patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-24",
+        "--reason",
+        "v2 legacy replay",
+    )
+
+    code, manifest = runner.execute(args)
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["write_action"] == "semantic_noop"
+
+    manifest_path = Path(saved["manifest_path"])
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    candidate_bytes = Path(payload["candidate_path"]).read_bytes()
+    official_bytes = official.read_bytes()
+    payload["comparison"] = runner.oft.build_semantic_comparison(
+        candidate=json.loads(candidate_bytes.decode("utf-8")),
+        official=json.loads(official_bytes.decode("utf-8")),
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol="300274",
+        target_date="2026-07-24",
+        comparison_mode=runner.oft.SEMANTIC_COMPARISON_V2_MODE,
+    )
+    assert payload["comparison"]["comparison_mode"] == runner.oft.SEMANTIC_COMPARISON_V2_MODE
+    assert payload["comparison"]["semantic_equal"] is True
+    manifest_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    rerun_code, rerun_manifest = runner.execute(args)
+    rerun = load_manifest(rerun_manifest)
+    assert rerun_code == 0
+    assert rerun["reason_code"] == "already_completed"
+    assert len(calls) == 1
+    assert official.read_bytes() == before
+
+
+def test_v2_phase_b_manifest_tampered_rejected(tmp_path, monkeypatch):
+    calendar = same_day_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    calls = patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-24",
+        "--reason",
+        "v2 tamper replay",
+    )
+
+    code, manifest = runner.execute(args)
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["write_action"] == "semantic_noop"
+
+    manifest_path = Path(saved["manifest_path"])
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    candidate_bytes = Path(payload["candidate_path"]).read_bytes()
+    official_bytes = official.read_bytes()
+    payload["comparison"] = runner.oft.build_semantic_comparison(
+        candidate=json.loads(candidate_bytes.decode("utf-8")),
+        official=json.loads(official_bytes.decode("utf-8")),
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol="300274",
+        target_date="2026-07-24",
+        comparison_mode=runner.oft.SEMANTIC_COMPARISON_V2_MODE,
+    )
+    assert payload["comparison"]["comparison_mode"] == runner.oft.SEMANTIC_COMPARISON_V2_MODE
+    payload["comparison"]["excluded_json_paths"] = list(
+        reversed(payload["comparison"]["excluded_json_paths"])
+    )
+    manifest_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    rerun_code, rerun_manifest = runner.execute(args)
+    rerun = load_manifest(rerun_manifest)
+    assert rerun_code == 0
+    assert rerun["reason_code"] != "already_completed"
+    assert len(calls) == 2
+    assert any(
+        item["path"] == saved["manifest_path"] and item["reason"].startswith("completion invalid:")
+        for item in rerun["scan_diagnostics"]
+    )
+
+
+REQUIRED_TIMESTAMP_PATHS = [
+    "generated_at",
+    "quote_verification.fetched_at",
+    "run.fetched_at",
+    "volume_ratio.five_day_volume_check.fetched_at",
+    "volume_ratio.verification.fetched_at",
+]
+
+
+@pytest.mark.parametrize("side", ["candidate", "official", "both"])
+@pytest.mark.parametrize("required_path", REQUIRED_TIMESTAMP_PATHS)
+def test_required_timestamp_path_deletion_blocks_semantic_noop(
+    tmp_path,
+    monkeypatch,
+    side,
+    required_path,
+):
+    calendar = same_day_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = same_day_facts_pair_07_24()
+    if side in {"candidate", "both"}:
+        delete_json_path(candidate, required_path)
+    if side in {"official", "both"}:
+        delete_json_path(official_payload, required_path)
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-24",
+            "--reason",
+            "required path deletion replay",
+        )
+    )
+
+    saved = load_manifest(manifest)
+    comparison = saved["comparison"]
+    expected_candidate_missing = [required_path] if side in {"candidate", "both"} else []
+    expected_official_missing = [required_path] if side in {"official", "both"} else []
+    assert code == 2
+    assert saved["write_action"] == "conflict_blocked"
+    assert saved["reason_code"] == "official_conflict"
+    assert comparison["semantic_equal"] is False
+    assert comparison["candidate_semantic_sha256"] is None
+    assert comparison["official_semantic_sha256"] is None
+    assert comparison["candidate_missing_required_paths"] == expected_candidate_missing
+    assert comparison["official_missing_required_paths"] == expected_official_missing
+    assert official.read_bytes() == before
+
+
+def _v3_pair_from_real_facts(day: str) -> tuple[dict, dict]:
+    official = json.loads(Path(f"data/daily/300274_{day}_facts.json").read_text(encoding="utf-8"))
+    candidate = copy.deepcopy(official)
+    for path in runner.oft.discover_timestamp_leaf_paths(official):
+        current = candidate
+        parts = path.split(".")
+        for part in parts[:-1]:
+            current = current[part]
+        current[parts[-1]] = "2026-08-03T00:00:00Z"
+    return official, candidate
+
+
+def _v3_compare(
+    official: dict,
+    candidate: dict,
+    *,
+    registry_path: Path | None = None,
+    profile_version: str | None = None,
+) -> dict:
+    official_bytes = json.dumps(official, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    candidate_bytes = json.dumps(candidate, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return runner.oft.build_semantic_comparison(
+        candidate=candidate,
+        official=official,
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol="300274",
+        target_date=str(official["trade_date"]),
+        profile_version=profile_version,
+        registry_path=registry_path,
+    )
+
+
+def test_archived_profile_legal_paths():
+    official, candidate = _v3_pair_from_real_facts("2026-07-14")
+    comparison = _v3_compare(official, candidate)
+    assert comparison["verification_method"] == "archived_tencent_snapshot_plus_sohu_historical_reverification"
+    assert comparison["semantic_equal"] is True
+    assert comparison["candidate_missing_required_paths"] == []
+    assert comparison["official_missing_required_paths"] == []
+    assert comparison["candidate_extra_paths"] == []
+    assert comparison["official_extra_paths"] == []
+    assert comparison["all_values_valid_timezone_datetime"] is True
+
+
+def test_legacy_manual_profile_is_fail_closed_blocked():
+    official, candidate = _v3_pair_from_real_facts("2026-07-24")
+    for payload in (official, candidate):
+        payload["volume_ratio"]["verification"]["method"] = "legacy_manual_confirmation"
+    comparison = _v3_compare(official, candidate)
+    assert comparison["verification_method"] == "legacy_manual_confirmation"
+    assert comparison["semantic_equal"] is False
+    assert comparison["candidate_semantic_sha256"] is None
+    assert comparison["official_semantic_sha256"] is None
+
+
+def test_unknown_method_profile_is_fail_closed():
+    official, candidate = _v3_pair_from_real_facts("2026-07-24")
+    for payload in (official, candidate):
+        payload["volume_ratio"]["verification"]["method"] = "unregistered_method"
+    comparison = _v3_compare(official, candidate)
+    assert comparison["verification_method"] == "unregistered_method"
+    assert comparison["semantic_equal"] is False
+    assert comparison["candidate_semantic_sha256"] is None
+
+
+def test_profile_missing_is_fail_closed():
+    official, candidate = _v3_pair_from_real_facts("2026-07-24")
+    for payload in (official, candidate):
+        payload["volume_ratio"]["verification"]["method"] = "method_without_profile"
+    comparison = _v3_compare(official, candidate)
+    assert comparison["verification_method"] == "method_without_profile"
+    assert comparison["semantic_equal"] is False
+    assert comparison["candidate_semantic_sha256"] is None
+
+
+def test_method_mismatch_is_fail_closed():
+    official, candidate = _v3_pair_from_real_facts("2026-07-24")
+    candidate["volume_ratio"]["verification"]["method"] = "historical_five_day_volume_cross_check"
+    comparison = _v3_compare(official, candidate)
+    assert comparison["semantic_equal"] is False
+    assert comparison["candidate_semantic_sha256"] is None
+    assert comparison["official_semantic_sha256"] is None
+
+
+def test_list_index_timestamp_path_is_fail_closed():
+    official, candidate = _v3_pair_from_real_facts("2026-07-24")
+    for payload in (official, candidate):
+        payload["run"]["events"] = [{"fetched_at": "2026-08-03T00:00:00Z"}]
+    comparison = _v3_compare(official, candidate)
+    assert comparison["semantic_equal"] is False
+    assert comparison["candidate_semantic_sha256"] is None
+    assert comparison["official_semantic_sha256"] is None
+
+
+def install_temp_profile_env(
+    monkeypatch,
+    tmp_path: Path,
+    *,
+    versions: tuple[str, ...] = ("v0.3",),
+    active: str = "v0.3",
+    config_mutator=None,
+    registry_mutator=None,
+) -> Path:
+    """Install a temp rules/ registry with simulated profile versions."""
+
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir(parents=True)
+    base = json.loads(Path("rules/semantic_noop_timestamp_profiles_v0.3.json").read_text(encoding="utf-8"))
+    entries = {}
+    for version in versions:
+        config = copy.deepcopy(base)
+        config["profile_version"] = version
+        if config_mutator:
+            config_mutator(config, version)
+        config_path = rules_dir / f"profiles_{version}.json"
+        config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        canonical = json.dumps(config, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        entries[version] = {
+            "path": f"rules/profiles_{version}.json",
+            "comparison_mode": "method_profile_timestamp_paths_v3",
+            "profile_sha256": hashlib.sha256(canonical).hexdigest(),
+            "status": "active" if version == active else "frozen",
+        }
+    registry = {
+        "schema_version": "semantic_noop_timestamp_profile_registry_v0.1",
+        "active_profile_version": active,
+        "profiles": entries,
+    }
+    if registry_mutator:
+        registry_mutator(registry)
+    registry_path = rules_dir / "registry.json"
+    registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    monkeypatch.setattr(runner.oft, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(runner.oft, "METHOD_PROFILE_REGISTRY_PATH", registry_path)
+    return registry_path
+
+
+def test_optional_path_single_side_appearance_is_fail_closed(tmp_path, monkeypatch):
+    def config_mutator(config, version):
+        profile = config["profiles"]["same_day_snapshot_plus_sohu_five_day_cross_check"]
+        profile["optional_paths"] = ["volume_ratio.extra_check.fetched_at"]
+        profile["optional_presence_conditions"] = {
+            "volume_ratio.extra_check.fetched_at": {"present_when_parent": "volume_ratio"}
+        }
+
+    install_temp_profile_env(monkeypatch, tmp_path, config_mutator=config_mutator)
+    official, candidate = _v3_pair_from_real_facts("2026-07-24")
+    candidate["volume_ratio"]["extra_check"] = {"fetched_at": "2026-08-03T00:00:01Z"}
+    official["volume_ratio"]["extra_check"] = {"fetched_at": "2026-08-03T00:00:02Z"}
+
+    both_present = _v3_compare(official, candidate)
+    assert both_present["semantic_equal"] is True
+
+    del official["volume_ratio"]["extra_check"]
+    single_side = _v3_compare(official, candidate)
+    assert single_side["semantic_equal"] is False
+    assert single_side["candidate_semantic_sha256"] is None
+
+
+def test_method_profile_config_validates_and_hashes():
+    config = runner.oft.load_method_profile_config()
+    assert config.comparison_mode == runner.oft.SEMANTIC_COMPARISON_V3_MODE
+    assert config.profile_version == "v0.3"
+    assert set(config.common_required_paths) == set(REQUIRED_TIMESTAMP_PATHS)
+    assert len(config.profiles) == 4
+    assert config.profiles["legacy_manual_confirmation"]["profile_status"] == "blocked"
+    assert config.sha256 == "11bb039d16e91f8d799ae37fadb25b23505eee6919747b18b829fef146e2e4c1"
+
+
+def test_v03_active_new_write_uses_v03():
+    registry = runner.oft.load_method_profile_registry()
+    assert registry.active_profile_version == "v0.3"
+    assert registry.entries["v0.3"].status == "active"
+    assert registry.entries["v0.3"].profile_sha256 == "11bb039d16e91f8d799ae37fadb25b23505eee6919747b18b829fef146e2e4c1"
+    config, entry = runner.oft.active_method_profile_config()
+    assert config.profile_version == "v0.3"
+    assert entry.status == "active"
+
+
+def test_v03_frozen_history_recomputable_and_active_switch_preserves_history(tmp_path, monkeypatch):
+    install_temp_profile_env(monkeypatch, tmp_path, versions=("v0.3", "v0.4"), active="v0.3")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    before = official.read_bytes()
+    calls = patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-24",
+        "--reason",
+        "registry history replay",
+    )
+
+    code, manifest = runner.execute(args)
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["write_action"] == "semantic_noop"
+    assert saved["comparison"]["profile_version"] == "v0.3"
+
+    registry_path = Path(runner.oft.METHOD_PROFILE_REGISTRY_PATH)
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    registry["active_profile_version"] = "v0.4"
+    registry["profiles"]["v0.3"]["status"] = "frozen"
+    registry["profiles"]["v0.4"]["status"] = "active"
+    registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    assert runner.oft.load_method_profile_registry().entries["v0.3"].status == "frozen"
+
+    rerun_code, rerun_manifest = runner.execute(args)
+    rerun = load_manifest(rerun_manifest)
+    assert rerun_code == 0
+    assert rerun["reason_code"] == "already_completed"
+    assert len(calls) == 1
+    assert official.read_bytes() == before
+
+
+def test_new_write_uses_simulated_v04(tmp_path, monkeypatch):
+    install_temp_profile_env(monkeypatch, tmp_path, versions=("v0.3", "v0.4"), active="v0.4")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+
+    code, manifest = runner.execute(
+        parse_write_args(
+            tmp_path,
+            calendar,
+            "--mode",
+            "historical_backfill",
+            "--date",
+            "2026-07-24",
+            "--reason",
+            "simulated v0.4 new write",
+        )
+    )
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["write_action"] == "semantic_noop"
+    assert saved["comparison"]["profile_version"] == "v0.4"
+    assert saved["comparison"]["profile_sha256"] != "11bb039d16e91f8d799ae37fadb25b23505eee6919747b18b829fef146e2e4c1"
+
+
+def test_unknown_profile_version_blocked(tmp_path, monkeypatch):
+    install_temp_profile_env(monkeypatch, tmp_path)
+    with pytest.raises(ValueError):
+        runner.oft.resolve_profile_for_version("v9.9")
+    with pytest.raises(ValueError):
+        runner.oft.build_semantic_comparison(
+            candidate={},
+            official={},
+            candidate_bytes=b"{}",
+            official_bytes=b"{}",
+            symbol="300274",
+            target_date="2026-07-24",
+            profile_version="v9.9",
+        )
+
+
+def test_registry_sha_mismatch_blocked(tmp_path, monkeypatch):
+    install_temp_profile_env(monkeypatch, tmp_path)
+    registry_path = Path(runner.oft.METHOD_PROFILE_REGISTRY_PATH)
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    registry["profiles"]["v0.3"]["profile_sha256"] = "0" * 64
+    registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        runner.oft.load_method_profile_registry()
+
+
+def test_manifest_profile_sha_mismatch_historical_blocked(tmp_path, monkeypatch):
+    install_temp_profile_env(monkeypatch, tmp_path)
+    calendar = same_day_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    calls = patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-24",
+        "--reason",
+        "manifest sha mismatch replay",
+    )
+    code, manifest = runner.execute(args)
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["write_action"] == "semantic_noop"
+
+    manifest_path = Path(saved["manifest_path"])
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["comparison"]["profile_sha256"] = "0" * 64
+    manifest_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    rerun_code, rerun_manifest = runner.execute(args)
+    rerun = load_manifest(rerun_manifest)
+    assert rerun_code == 0
+    assert rerun["reason_code"] != "already_completed"
+    assert len(calls) == 2
+
+
+def test_missing_historical_config_blocked(tmp_path, monkeypatch):
+    install_temp_profile_env(monkeypatch, tmp_path, versions=("v0.3", "v0.4"), active="v0.4")
+    (tmp_path / "rules" / "profiles_v0.3.json").unlink()
+    with pytest.raises(ValueError):
+        runner.oft.load_method_profile_registry()
+
+
+def test_registry_path_escape_blocked(tmp_path, monkeypatch):
+    install_temp_profile_env(monkeypatch, tmp_path)
+    registry_path = Path(runner.oft.METHOD_PROFILE_REGISTRY_PATH)
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    registry["profiles"]["v0.3"]["path"] = "../escape.json"
+    registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        runner.oft.load_method_profile_registry()
+
+
+def test_registry_duplicate_key_blocked(tmp_path):
+    path = tmp_path / "registry.json"
+    path.write_text(
+        '{"schema_version": "semantic_noop_timestamp_profile_registry_v0.1", '
+        '"schema_version": "duplicate", "active_profile_version": "v0.3", "profiles": {}}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError):
+        runner.oft.load_method_profile_registry(path)
+
+
+def test_profile_json_duplicate_key_blocked(tmp_path):
+    path = tmp_path / "profiles.json"
+    path.write_text(
+        '{"schema_version": "semantic_noop_timestamp_profiles_v0.3", '
+        '"schema_version": "duplicate"}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError):
+        runner.oft.load_method_profile_config(path)
+
+
+def _write_temp_profile_config(tmp_path: Path, mutator) -> Path:
+    config = json.loads(Path("rules/semantic_noop_timestamp_profiles_v0.3.json").read_text(encoding="utf-8"))
+    mutator(config)
+    path = tmp_path / "profiles.json"
+    path.write_text(json.dumps(config, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
+
+
+def test_unknown_top_level_field_blocked(tmp_path):
+    path = _write_temp_profile_config(tmp_path, lambda config: config.update({"extra_field": 1}))
+    with pytest.raises(ValueError):
+        runner.oft.load_method_profile_config(path)
+
+
+def test_unknown_profile_field_blocked(tmp_path):
+    def mutator(config):
+        config["profiles"]["same_day_snapshot_plus_sohu_five_day_cross_check"]["extra_field"] = 1
+
+    path = _write_temp_profile_config(tmp_path, mutator)
+    with pytest.raises(ValueError):
+        runner.oft.load_method_profile_config(path)
+
+
+def test_unknown_condition_field_blocked(tmp_path):
+    def mutator(config):
+        profile = config["profiles"]["same_day_snapshot_plus_sohu_five_day_cross_check"]
+        profile["optional_paths"] = ["volume_ratio.extra_check.fetched_at"]
+        profile["optional_presence_conditions"] = {
+            "volume_ratio.extra_check.fetched_at": {
+                "present_when_parent": "volume_ratio",
+                "unknown_condition_field": True,
+            }
+        }
+
+    path = _write_temp_profile_config(tmp_path, mutator)
+    with pytest.raises(ValueError):
+        runner.oft.load_method_profile_config(path)
+
+
+def test_blocked_profile_with_required_path_blocked(tmp_path):
+    def mutator(config):
+        config["profiles"]["legacy_manual_confirmation"]["required_paths"] = ["generated_at"]
+
+    path = _write_temp_profile_config(tmp_path, mutator)
+    with pytest.raises(ValueError):
+        runner.oft.load_method_profile_config(path)
+
+
+def test_blocked_profile_missing_reason_blocked(tmp_path):
+    def mutator(config):
+        del config["profiles"]["legacy_manual_confirmation"]["reason"]
+
+    path = _write_temp_profile_config(tmp_path, mutator)
+    with pytest.raises(ValueError):
+        runner.oft.load_method_profile_config(path)
+
+
+def test_active_profile_with_reason_blocked(tmp_path):
+    def mutator(config):
+        config["profiles"]["same_day_snapshot_plus_sohu_five_day_cross_check"]["reason"] = "not allowed"
+
+    path = _write_temp_profile_config(tmp_path, mutator)
+    with pytest.raises(ValueError):
+        runner.oft.load_method_profile_config(path)
+
+
+def test_canonical_ensure_ascii_false_recompute():
+    from pathlib import Path as _Path
+
+    config = runner.oft.load_method_profile_config()
+    parsed = json.loads(_Path("rules/semantic_noop_timestamp_profiles_v0.3.json").read_text(encoding="utf-8"))
+    canonical = runner.oft.canonical_json_bytes(parsed)
+    assert hashlib.sha256(canonical).hexdigest() == config.sha256
+    assert config.sha256 == "11bb039d16e91f8d799ae37fadb25b23505eee6919747b18b829fef146e2e4c1"
+    ascii_free = runner.oft.canonical_json_bytes({"name": "阳光电源"}).decode("utf-8")
+    assert "阳光电源" in ascii_free
+    assert "\\u" not in ascii_free
+    doc = _Path("rules/run_daily_facts_after_close_phase_b_v0.3.md").read_text(encoding="utf-8")
+    assert "ensure_ascii=False" in doc
+    assert "sort_keys=True" in doc
+    assert 'separators=(",", ":")' in doc
+
+
+def test_v1_v2_recompute_unaffected_by_registry(tmp_path, monkeypatch):
+    install_temp_profile_env(monkeypatch, tmp_path, versions=("v0.3", "v0.4"), active="v0.4")
+    official, candidate = _v3_pair_from_real_facts("2026-07-24")
+    official_bytes = json.dumps(official, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    candidate_bytes = json.dumps(candidate, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    v1 = runner.oft.build_semantic_comparison(
+        candidate=candidate,
+        official=official,
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol="300274",
+        target_date="2026-07-24",
+        comparison_mode=runner.oft.SEMANTIC_COMPARISON_V1_MODE,
+    )
+    v2 = runner.oft.build_semantic_comparison(
+        candidate=candidate,
+        official=official,
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol="300274",
+        target_date="2026-07-24",
+        comparison_mode=runner.oft.SEMANTIC_COMPARISON_V2_MODE,
+    )
+    assert v1["semantic_equal"] is True
+    assert v2["semantic_equal"] is True
+
+
+def test_phase_b_phase_c_historical_version_dispatch_equivalent(tmp_path, monkeypatch):
+    install_temp_profile_env(monkeypatch, tmp_path, versions=("v0.3", "v0.4"), active="v0.3")
+    calendar = same_day_calendar(tmp_path / "calendar.json")
+    repo = install_temp_repo_root(monkeypatch, tmp_path)
+    official_payload, candidate = same_day_facts_pair_07_24()
+    official = repo / "data" / "daily" / "300274_2026-07-24_facts.json"
+    official.write_bytes(runner._json_payload(official_payload))
+    calls = patch_generator(monkeypatch, returncode=2, stdout=marker_for(candidate))
+    args = parse_write_args(
+        tmp_path,
+        calendar,
+        "--mode",
+        "historical_backfill",
+        "--date",
+        "2026-07-24",
+        "--reason",
+        "historical dispatch equivalence",
+    )
+    code, manifest = runner.execute(args)
+    saved = load_manifest(manifest)
+    assert code == 0
+    assert saved["write_action"] == "semantic_noop"
+    assert saved["comparison"]["profile_version"] == "v0.3"
+
+    registry_path = Path(runner.oft.METHOD_PROFILE_REGISTRY_PATH)
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    registry["active_profile_version"] = "v0.4"
+    registry["profiles"]["v0.3"]["status"] = "frozen"
+    registry["profiles"]["v0.4"]["status"] = "active"
+    registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    rerun_code, rerun_manifest = runner.execute(args)
+    rerun = load_manifest(rerun_manifest)
+    assert rerun_code == 0
+    assert rerun["reason_code"] == "already_completed"
+    assert len(calls) == 1
+
+    result = phase_c.generate_review(
+        phase_c.ReviewOptions(
+            runtime_dir=tmp_path / "phase-c-runtime",
+            runner_runtime_dir=tmp_path / "runtime",
+            symbol="300274",
+            trade_date="2026-07-24",
+            runner_manifest_path=Path(saved["manifest_path"]),
+            repo_root=repo,
+            official_lock_dir=tmp_path / "phase-c-locks",
+            now=lambda: datetime(2026, 7, 24, 16, 30, tzinfo=ZoneInfo("Asia/Shanghai")),
+        )
+    )
+    review = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert result.status == "review_created"
+    assert review["artifact_type"] == "facts_review"
+    assert review["write_action"] == "semantic_noop"
+    assert review["evidence_summary"]["semantic_comparison"]["profile_version"] == "v0.3"
+    assert review["evidence_summary"]["semantic_comparison"]["semantic_equal"] is True
 
 
 def test_write_official_existing_different_conflict_blocks(tmp_path, monkeypatch):

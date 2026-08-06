@@ -1,0 +1,45 @@
+{
+  "schema_version": "fable_review_archive_v0.1",
+  "archive_name": "cross_method_provenance_fable_review_2026-08-05",
+  "run_id": "pi-cross-method-provenance-20260805-053941",
+  "source_temp_dir": "/private/tmp/pi-cross-method-provenance-20260805-053941",
+  "archived_files": [
+    {
+      "path": "fable_raw.md",
+      "size_bytes": 9576,
+      "sha256": "0541d6a2fb5dd2625a72ee392180edf8a1a51a7fd77447db514a7d9914deef93"
+    },
+    {
+      "path": "formal_prompt.md",
+      "size_bytes": 16803,
+      "sha256": "ce051c2a7884e4c1a7ba3100e00ceb8958be31b37d1cb1a7ee56064ba4b94261"
+    },
+    {
+      "path": "run_meta.json",
+      "size_bytes": 1410,
+      "sha256": "7e664735874d33baeb873d8764f76711d5622ad8681ac79f2ca2ce5616c11684"
+    },
+    {
+      "path": "pi_events.jsonl",
+      "size_bytes": 12176248,
+      "sha256": "f53a4b1d1d8a3d03e37a0a08cfec8b7ac86bcb5241230f318960a38b965e84b2"
+    }
+  ],
+  "report_sha_match": true,
+  "prompt_sha_match": true,
+  "run_meta_consistent": true,
+  "credential_scan": "PASS",
+  "source_worktree_unchanged": true,
+  "review_files_modified": false,
+  "report_internal_model_identity": "UNKNOWN",
+  "orchestration_model_metadata": {
+    "model": "anthropic/claude-fable-5",
+    "provider": "ZenMux",
+    "backend": "Pi guarded tools",
+    "thinking": "low"
+  },
+  "verdict": "KEEP_DEFERRED",
+  "current_0731_disposition": "KEEP_DEFERRED",
+  "implementation_value": "NOT_WORTH_BUILDING",
+  "notes": "外层 orchestration 元数据（anthropic/claude-fable-5 / ZenMux / Pi guarded tools / thinking=low）不等于报告内部自行证明的模型身份；report internal identity 按 fail-closed 记 UNKNOWN。原始文件字节逐字归档，未修改任何源文件。"
+}

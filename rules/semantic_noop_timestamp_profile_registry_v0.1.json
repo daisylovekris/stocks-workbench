@@ -1,0 +1,12 @@
+{
+  "schema_version": "semantic_noop_timestamp_profile_registry_v0.1",
+  "active_profile_version": "v0.3",
+  "profiles": {
+    "v0.3": {
+      "path": "rules/semantic_noop_timestamp_profiles_v0.3.json",
+      "comparison_mode": "method_profile_timestamp_paths_v3",
+      "profile_sha256": "11bb039d16e91f8d799ae37fadb25b23505eee6919747b18b829fef146e2e4c1",
+      "status": "active"
+    }
+  }
+}

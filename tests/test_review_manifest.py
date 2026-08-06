@@ -100,6 +100,7 @@ def write_runner(
 
 def semantic_facts_pair(*, status: str = "partial") -> tuple[dict, dict]:
     official = facts_payload(status=status, needs={"market_indices": True})
+    official["volume_ratio"]["verification"]["method"] = "same_day_snapshot_plus_sohu_five_day_cross_check"
     official["generated_at"] = "2026-07-16T08:00:00Z"
     official["quote_verification"]["fetched_at"] = "2026-07-16T08:00:01Z"
     official["run"]["fetched_at"] = "2026-07-16T08:00:02Z"
@@ -232,6 +233,71 @@ def test_phase_c_accepts_valid_semantic_noop_and_is_idempotent(tmp_path):
     assert len(rm.read_index(second.index_path)) == 1
 
 
+def test_phase_c_accepts_legacy_v1_semantic_noop(tmp_path):
+    official_payload, candidate = semantic_facts_pair()
+    official_bytes = payload_bytes(official_payload)
+    repo, official, sha = setup_repo(tmp_path, official_bytes=official_bytes)
+    candidate_bytes = payload_bytes(candidate)
+    comparison = rm.oft.build_semantic_comparison(
+        candidate=candidate,
+        official=official_payload,
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol=SYMBOL,
+        target_date=TRADE_DATE,
+        comparison_mode=rm.oft.SEMANTIC_COMPARISON_V1_MODE,
+    )
+    assert comparison["comparison_mode"] == rm.oft.SEMANTIC_COMPARISON_V1_MODE
+    runner = write_semantic_runner(
+        tmp_path / "runner-bundle" / "manifest.json",
+        official=official,
+        official_payload=official_payload,
+        candidate=candidate,
+        comparison=comparison,
+    )
+
+    result = rm.generate_review(options(tmp_path, repo, runner))
+    manifest = load_manifest(result)
+    assert result.status == "review_created"
+    assert hashlib.sha256(official.read_bytes()).hexdigest() == sha
+    assert manifest["artifact_type"] == "facts_review"
+    assert manifest["write_action"] == "semantic_noop"
+    assert manifest["write_reason_code"] == "official_semantically_identical"
+    assert manifest["evidence_summary"]["semantic_comparison"]["comparison_mode"] == rm.oft.SEMANTIC_COMPARISON_V1_MODE
+    assert manifest["evidence_summary"]["semantic_comparison"]["semantic_equal"] is True
+
+
+def test_phase_c_rejects_tampered_legacy_v1_semantic_noop(tmp_path):
+    official_payload, candidate = semantic_facts_pair()
+    official_bytes = payload_bytes(official_payload)
+    repo, official, _sha = setup_repo(tmp_path, official_bytes=official_bytes)
+    candidate_bytes = payload_bytes(candidate)
+    comparison = rm.oft.build_semantic_comparison(
+        candidate=candidate,
+        official=official_payload,
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol=SYMBOL,
+        target_date=TRADE_DATE,
+        comparison_mode=rm.oft.SEMANTIC_COMPARISON_V1_MODE,
+    )
+    runner = write_semantic_runner(
+        tmp_path / "runner-bundle" / "manifest.json",
+        official=official,
+        official_payload=official_payload,
+        candidate=candidate,
+        comparison=comparison,
+    )
+    payload = json.loads(runner.read_text(encoding="utf-8"))
+    payload["comparison"]["candidate_semantic_sha256"] = "f" * 64
+    runner.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+    manifest = load_manifest(rm.generate_review(options(tmp_path, repo, runner)))
+    assert manifest["artifact_type"] == "incident_review"
+    assert manifest["incident_reason_code"] == "runner_manifest_invalid"
+    assert manifest["write_action"] is None
+
+
 def test_phase_c_rejects_tampered_semantic_sha(tmp_path):
     official_payload, candidate = semantic_facts_pair()
     repo, official, _sha = setup_repo(tmp_path, official_bytes=payload_bytes(official_payload))
@@ -243,6 +309,117 @@ def test_phase_c_rejects_tampered_semantic_sha(tmp_path):
     )
     payload = json.loads(runner.read_text(encoding="utf-8"))
     payload["comparison"]["candidate_semantic_sha256"] = "f" * 64
+    runner.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+    manifest = load_manifest(rm.generate_review(options(tmp_path, repo, runner)))
+    assert manifest["artifact_type"] == "incident_review"
+    assert manifest["incident_reason_code"] == "runner_manifest_invalid"
+    assert manifest["write_action"] is None
+
+
+def test_phase_c_accepts_legacy_v2_semantic_noop(tmp_path):
+    official_payload, candidate = semantic_facts_pair()
+    official_bytes = payload_bytes(official_payload)
+    repo, official, sha = setup_repo(tmp_path, official_bytes=official_bytes)
+    candidate_bytes = payload_bytes(candidate)
+    comparison = rm.oft.build_semantic_comparison(
+        candidate=candidate,
+        official=official_payload,
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol=SYMBOL,
+        target_date=TRADE_DATE,
+        comparison_mode=rm.oft.SEMANTIC_COMPARISON_V2_MODE,
+    )
+    assert comparison["comparison_mode"] == rm.oft.SEMANTIC_COMPARISON_V2_MODE
+    assert comparison["semantic_equal"] is True
+    runner = write_semantic_runner(
+        tmp_path / "runner-bundle" / "manifest.json",
+        official=official,
+        official_payload=official_payload,
+        candidate=candidate,
+        comparison=comparison,
+    )
+
+    result = rm.generate_review(options(tmp_path, repo, runner))
+    manifest = load_manifest(result)
+    assert result.status == "review_created"
+    assert hashlib.sha256(official.read_bytes()).hexdigest() == sha
+    assert manifest["artifact_type"] == "facts_review"
+    assert manifest["write_action"] == "semantic_noop"
+    assert manifest["evidence_summary"]["semantic_comparison"]["comparison_mode"] == rm.oft.SEMANTIC_COMPARISON_V2_MODE
+    assert manifest["evidence_summary"]["semantic_comparison"]["semantic_equal"] is True
+
+
+def test_phase_c_rejects_tampered_legacy_v2_semantic_noop(tmp_path):
+    official_payload, candidate = semantic_facts_pair()
+    official_bytes = payload_bytes(official_payload)
+    repo, official, _sha = setup_repo(tmp_path, official_bytes=official_bytes)
+    candidate_bytes = payload_bytes(candidate)
+    comparison = rm.oft.build_semantic_comparison(
+        candidate=candidate,
+        official=official_payload,
+        candidate_bytes=candidate_bytes,
+        official_bytes=official_bytes,
+        symbol=SYMBOL,
+        target_date=TRADE_DATE,
+        comparison_mode=rm.oft.SEMANTIC_COMPARISON_V2_MODE,
+    )
+    runner = write_semantic_runner(
+        tmp_path / "runner-bundle" / "manifest.json",
+        official=official,
+        official_payload=official_payload,
+        candidate=candidate,
+        comparison=comparison,
+    )
+    payload = json.loads(runner.read_text(encoding="utf-8"))
+    payload["comparison"]["excluded_json_paths"] = list(
+        reversed(payload["comparison"]["excluded_json_paths"])
+    )
+    runner.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+    manifest = load_manifest(rm.generate_review(options(tmp_path, repo, runner)))
+    assert manifest["artifact_type"] == "incident_review"
+    assert manifest["incident_reason_code"] == "runner_manifest_invalid"
+    assert manifest["write_action"] is None
+
+
+def test_phase_c_accepts_v3_semantic_noop_with_profile_identity(tmp_path):
+    official_payload, candidate = semantic_facts_pair()
+    official_bytes = payload_bytes(official_payload)
+    repo, official, sha = setup_repo(tmp_path, official_bytes=official_bytes)
+    runner = write_semantic_runner(
+        tmp_path / "runner-bundle" / "manifest.json",
+        official=official,
+        official_payload=official_payload,
+        candidate=candidate,
+    )
+
+    result = rm.generate_review(options(tmp_path, repo, runner))
+    manifest = load_manifest(result)
+    comparison = manifest["evidence_summary"]["semantic_comparison"]
+    profile_config = rm.oft.load_method_profile_config()
+    assert result.status == "review_created"
+    assert hashlib.sha256(official.read_bytes()).hexdigest() == sha
+    assert manifest["write_action"] == "semantic_noop"
+    assert comparison["comparison_mode"] == rm.oft.SEMANTIC_COMPARISON_V3_MODE
+    assert comparison["profile_version"] == profile_config.profile_version
+    assert comparison["profile_sha256"] == profile_config.sha256
+    assert comparison["verification_method"] == "same_day_snapshot_plus_sohu_five_day_cross_check"
+    assert comparison["semantic_equal"] is True
+
+
+def test_phase_c_rejects_tampered_v3_profile_sha(tmp_path):
+    official_payload, candidate = semantic_facts_pair()
+    repo, official, _sha = setup_repo(tmp_path, official_bytes=payload_bytes(official_payload))
+    runner = write_semantic_runner(
+        tmp_path / "runner-bundle" / "manifest.json",
+        official=official,
+        official_payload=official_payload,
+        candidate=candidate,
+    )
+    payload = json.loads(runner.read_text(encoding="utf-8"))
+    payload["comparison"]["profile_sha256"] = "0" * 64
     runner.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 
     manifest = load_manifest(rm.generate_review(options(tmp_path, repo, runner)))

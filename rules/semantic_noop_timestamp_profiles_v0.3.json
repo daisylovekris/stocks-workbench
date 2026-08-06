@@ -1,0 +1,64 @@
+{
+  "schema_version": "semantic_noop_timestamp_profiles_v0.3",
+  "profile_version": "v0.3",
+  "comparison_mode": "method_profile_timestamp_paths_v3",
+  "common_required_paths": [
+    "generated_at",
+    "quote_verification.fetched_at",
+    "run.fetched_at",
+    "volume_ratio.five_day_volume_check.fetched_at",
+    "volume_ratio.verification.fetched_at"
+  ],
+  "allow_list_index_paths": false,
+  "profiles": {
+    "archived_tencent_snapshot_plus_sohu_historical_reverification": {
+      "allow_list_index_paths": false,
+      "optional_paths": [],
+      "optional_presence_conditions": {},
+      "required_paths": [
+        "generated_at",
+        "quote_verification.fetched_at",
+        "run.fetched_at",
+        "volume_ratio.five_day_volume_check.fetched_at",
+        "volume_ratio.historical_ohlc_check.fetched_at",
+        "volume_ratio.legacy_verification.fetched_at",
+        "volume_ratio.verification.fetched_at"
+      ]
+    },
+    "historical_five_day_volume_cross_check": {
+      "allow_list_index_paths": false,
+      "optional_paths": [],
+      "optional_presence_conditions": {},
+      "required_paths": [
+        "generated_at",
+        "quote_verification.fetched_at",
+        "run.fetched_at",
+        "volume_ratio.five_day_volume_check.fetched_at",
+        "volume_ratio.source_volume_checks.sohu_history.fetched_at",
+        "volume_ratio.source_volume_checks.tencent_history.fetched_at",
+        "volume_ratio.verification.fetched_at"
+      ]
+    },
+    "legacy_manual_confirmation": {
+      "allow_list_index_paths": false,
+      "optional_paths": [],
+      "optional_presence_conditions": {},
+      "profile_status": "blocked",
+      "reason": "no unique timestamp profile derivable: no real v0.2 sample exists; the frozen v0.1 fixture verification carries no fetched_at; the generator merge preserves origin-dependent evidence (verification.fetched_at presence depends on the locked source pack) and automation_evidence.fetched_at appears only when a fresh candidate was available; the Validator contract does not constrain fetched_at paths",
+      "required_paths": []
+    },
+    "same_day_snapshot_plus_sohu_five_day_cross_check": {
+      "allow_list_index_paths": false,
+      "optional_paths": [],
+      "optional_presence_conditions": {},
+      "required_paths": [
+        "generated_at",
+        "quote_verification.fetched_at",
+        "run.fetched_at",
+        "volume_ratio.five_day_volume_check.fetched_at",
+        "volume_ratio.snapshot_ohlc_check.fetched_at",
+        "volume_ratio.verification.fetched_at"
+      ]
+    }
+  }
+}

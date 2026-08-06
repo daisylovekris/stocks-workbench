@@ -1,0 +1,164 @@
+{
+  "generated_at": "2026-08-02T20:20:43Z",
+  "missing": {
+    "disclosure_status": null,
+    "market_indices": null,
+    "news_policy_context": null,
+    "sector_context": null
+  },
+  "name": "阳光电源",
+  "needs_manual_check": {
+    "disclosure_status": true,
+    "market_indices": true,
+    "news_policy_context": true,
+    "sector_context": true,
+    "volume_ratio": false
+  },
+  "quote": {
+    "amount": 55.749262,
+    "close": 112.08,
+    "high": 115.77,
+    "low": 110.24,
+    "open": 115.72,
+    "pct_change": -3.553911023147749,
+    "prev_close": 116.21,
+    "turnover_rate": 3.13
+  },
+  "quote_verification": {
+    "delta": -0.003911023147749049,
+    "derived_pct_change": -3.553911023147749,
+    "error_message": null,
+    "error_type": null,
+    "fetched_at": "2026-08-02T20:20:40Z",
+    "field_sources": {
+      "amount": "sohu_history",
+      "close": "tencent_fqkline",
+      "high": "tencent_fqkline",
+      "low": "tencent_fqkline",
+      "open": "tencent_fqkline",
+      "prev_close": "tencent_fqkline",
+      "turnover_rate": "sohu_history"
+    },
+    "notes": null,
+    "source": "tencent",
+    "source_date": "2026-07-28",
+    "source_pct_change": -3.55,
+    "status": "confirmed"
+  },
+  "run": {
+    "errors": [],
+    "fetched_at": "2026-08-02T20:20:40Z",
+    "name_source": "source",
+    "requested_source": "auto",
+    "source_used": "tencent",
+    "status": "partial",
+    "target_date": "2026-07-28"
+  },
+  "schema_version": "facts_pack_v0.2",
+  "symbol": "300274",
+  "trade_date": "2026-07-28",
+  "volume_ratio": {
+    "candidate_value": 0.73,
+    "confirmed_value": 0.73,
+    "cross_check": {
+      "delta": 0.0,
+      "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+      "source": "tencent_five_day_volume_derived",
+      "source_date": "2026-07-28",
+      "tolerance": 0.01,
+      "value": 0.73
+    },
+    "five_day_volume_check": {
+      "calculated_value": 0.73,
+      "expected_value": 0.73,
+      "fetched_at": "2026-08-02T20:20:41Z",
+      "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+      "source": "tencent_history",
+      "status": "passed",
+      "target_volume": 497571.0,
+      "tolerance": 0.01,
+      "trade_dates": [
+        "2026-07-21",
+        "2026-07-22",
+        "2026-07-23",
+        "2026-07-24",
+        "2026-07-27",
+        "2026-07-28"
+      ],
+      "volumes": [
+        670682.0,
+        847182.0,
+        930068.0,
+        550996.0,
+        407188.0,
+        497571.0
+      ]
+    },
+    "source": "sohu_five_day_volume+tencent_five_day_volume",
+    "source_volume_checks": {
+      "sohu_history": {
+        "calculated_value": 0.73,
+        "expected_value": 0.73,
+        "fetched_at": "2026-08-02T20:20:41Z",
+        "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+        "source": "sohu_history",
+        "status": "passed",
+        "target_volume": 497571.0,
+        "tolerance": 0.01,
+        "trade_dates": [
+          "2026-07-21",
+          "2026-07-22",
+          "2026-07-23",
+          "2026-07-24",
+          "2026-07-27",
+          "2026-07-28"
+        ],
+        "volumes": [
+          670682.0,
+          847182.0,
+          930068.0,
+          550996.0,
+          407188.0,
+          497571.0
+        ]
+      },
+      "tencent_history": {
+        "calculated_value": 0.73,
+        "expected_value": 0.73,
+        "fetched_at": "2026-08-02T20:20:41Z",
+        "formula": "target_day_volume / mean(prior_5_trading_day_volume)",
+        "source": "tencent_history",
+        "status": "passed",
+        "target_volume": 497571.0,
+        "tolerance": 0.01,
+        "trade_dates": [
+          "2026-07-21",
+          "2026-07-22",
+          "2026-07-23",
+          "2026-07-24",
+          "2026-07-27",
+          "2026-07-28"
+        ],
+        "volumes": [
+          670682.0,
+          847182.0,
+          930068.0,
+          550996.0,
+          407188.0,
+          497571.0
+        ]
+      }
+    },
+    "verification": {
+      "confirmed_by": "automation_cross_check",
+      "error_message": null,
+      "error_type": null,
+      "fetched_at": "2026-08-02T20:20:41Z",
+      "method": "historical_five_day_volume_cross_check",
+      "notes": "historical volume ratio confirmed from Sohu and Tencent daily volume; amount-based ratios are not accepted",
+      "source": "sohu_five_day_volume+tencent_five_day_volume",
+      "source_date": "2026-07-28",
+      "status": "confirmed"
+    }
+  }
+}
