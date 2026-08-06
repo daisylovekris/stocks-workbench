@@ -5,19 +5,25 @@
 | Field | Value |
 |---|---|
 | `schema_version` | `project_memory_v0.1` |
-| `as_of_commit` | `f38b563502fa7e098f8420062c5b71f9fb231fdf` |
-| `as_of_date` | `2026-08-03` |
+| `as_of_commit` | `6d0d2251810b9d04d78386f7bc6271e5233e9611` |
+| `as_of_date` | `2026-08-06` |
 | `current_branch` | `workbench/mainline-2026-07` |
-| `current_milestone` | `Project Memory v0.1 implementation closed` |
+| `current_milestone` | `semantic_noop method-profile v3 and Sungrow backfill sealed` |
 | `work_status` | `completed` |
 | `completed_scopes` | `[design, implementation, validation, closure]` |
-| `completed_closures` | `[Phase A, Phase B, Phase C, semantic_noop mechanism, SWP design, Project Memory v0.1 design, Project Memory v0.1 implementation]` |
+| `completed_closures` | `[Phase A, Phase B, Phase C, semantic_noop mechanism, SWP design, Project Memory v0.1 design, Project Memory v0.1 implementation, semantic_noop method-profile v3, Sungrow 2026-07-27 through 2026-07-30 runtime authority chain, Sungrow 2026-07-31 KEEP_DEFERRED disposition]` |
 | `active_work` | `[]` |
 | `queued_work` | `[]` |
-| `deferred_work` | `[Phase D archaeology, production validator implementation]` |
+| `deferred_work` | `[Phase D archaeology, production validator implementation, provenance_migration_v1 design-only, 2026-07-31 automated authority recovery unavailable]` |
 | `blockers` | `[]` |
 | `known_dirty_exclusions` | See the exact repository-relative paths below. |
 | `source_references` | See the complete commit-bound objects below. |
+
+## Current status
+
+- 2026-07-27 through 2026-07-30: Phase B 4/4, Phase C 4/4, index authority 4/4, review_state=needs_manual_review, downstream permissions all false.
+- 2026-07-31: official facts valid; original provenance unavailable; Phase B authority missing; Phase C absent; disposition KEEP_DEFERRED; 2026-07-27 through 2026-07-31 full-week automated SWP candidate blocked; four-day automated weekly candidate prohibited; a manual weekly note may cite official facts and must declare authority missing.
+- provenance_migration_v1: future design direction only; current implementation value = NOT_WORTH_BUILDING.
 
 ## Known dirty exclusions
 
@@ -37,6 +43,7 @@ The following exact paths were outside the Project Memory v0.1 implementation ca
 - `reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/smoke/`
 - `reports/validation/artifacts/project_memory_v0.1_fable_final_review_2026-08-02/smoke_retry/`
 - `reports/validation/artifacts/semantic_noop_full_mechanism_2026-07-25/`
+- `reports/validation/artifacts/semantic_noop_timestamp_paths_v2_fable_review_2026-08-04/`
 - `reports/validation/artifacts/semantic_noop_phase_c_2026-07-24/effort-low-probe-response.json`
 - `reports/validation/artifacts/semantic_noop_phase_c_2026-07-24/effort-low-probe.json`
 - `reports/validation/artifacts/semantic_noop_phase_c_2026-07-24/fable_phase_c_prompt.txt`
@@ -62,6 +69,7 @@ The following exact paths were outside the Project Memory v0.1 implementation ca
 - `reports/validation/project_memory_v0.1_design_r2_2026-07-29.md`
 - `reports/validation/project_memory_v0.1_design_r3_2026-07-29.md`
 - `reports/validation/project_memory_v0.1_design_r4_2026-07-29.md`
+- `reports/validation/semantic_noop_timestamp_paths_v2_candidate_2026-08-03.md`
 - `reports/warp_windows_BCD_review_2026-07-25.md`
 - `rules/fable_phase_c_external_review_v0.1.md`
 
@@ -80,8 +88,16 @@ The following exact paths were outside the Project Memory v0.1 implementation ca
 - {path: reports/validation/artifacts/project_memory_v0.1_implementation_final_closure_2026-08-02/closure_manifest.json, snapshot_kind: commit, snapshot_commit: 844d8b541d7fd3165ce9e9a1725f207e1764da51, raw_sha256: da4b0f023a18dd136f4f7d398f66294a90fac0b536c9e64c03f1c145d507fbd6, role: implementation_closure_manifest}
 - {path: reports/validation/project_memory_v0.1_provenance_revalidation_2026-08-02.md, snapshot_kind: commit, snapshot_commit: f38b563502fa7e098f8420062c5b71f9fb231fdf, raw_sha256: a188c02337204fb279fd2adaef5f5da35bcd231a8d7613b9fd6af7fba26f8895, role: provenance_revalidation_report}
 - {path: reports/validation/artifacts/project_memory_v0.1_provenance_revalidation_2026-08-02/review_meta.json, snapshot_kind: commit, snapshot_commit: f38b563502fa7e098f8420062c5b71f9fb231fdf, raw_sha256: 8a8ca17c8021d12ab4ba0d1e488259ec1725479f972f5f03ef3307c124de4510, role: provenance_review_metadata}
+- {path: rules/run_daily_facts_after_close_phase_b_v0.3.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 06423196570392aa7bbd19d2afbc6427794371c6bd36053a6ecf27af49aeec7b, role: phase_b_v0.3_rule}
+- {path: rules/review_manifest_phase_c_v0.3.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 3840735711c5033c010d53f1b2318eb1bb7676ddf05350367e27a7204ef63279, role: phase_c_v0.3_rule}
+- {path: rules/semantic_noop_timestamp_profiles_v0.3.json, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 310597913948359642bc9deb20420c22dc698bf225cb7c403122c4caec49d23c, role: timestamp_profiles_v0.3}
+- {path: rules/semantic_noop_timestamp_profile_registry_v0.1.json, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 7432e3cce819b72995ca01499d7d957679d7469c8139e5bec216a393f646c12b, role: timestamp_profile_registry_v0.1}
+- {path: reports/validation/semantic_noop_method_profile_v3_closure_candidate_2026-08-05.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 6e0d96369925b0c225343beefc55fcbb4c38186b56a4129375d81ac25a1799f6, role: method_profile_v3_closure_candidate}
+- {path: reports/validation/sungrow_daily_facts_backfill_2026-07-27_2026-07-31_validation.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 3a0b2b413a3cf5dbd0a45e9b6462e6607ba30c471bc0934fe8dbf8ab76939abb, role: facts_backfill_validation}
+- {path: reports/validation/sungrow_daily_review_backfill_2026-07-27_2026-07-31_validation.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 6fb05d1b75b3a4cbb7181e0da7cad2f6876c236214b09af8370d1bee96a8fbc1, role: review_backfill_validation}
+- {path: reports/validation/artifacts/cross_method_provenance_fable_review_2026-08-05/manifest.json, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 06a5547ebe9f8093e98927037ad3cd4ed1065d652be1a6f27fea076f8c3c5af1, role: cross_method_provenance_manifest}
 ```
 
 ## Interpretation boundary
 
-Project Memory v0.1 implementation is closed and its implementation/closure provenance has been revalidated in isolation. Memory still grants no trading, Git, business-state, or review-verdict authority. The production validator remains deferred. Push still requires separate explicit user authorization.
+Project Memory v0.1 implementation is closed, its implementation/closure provenance has been revalidated in isolation, and the semantic_noop method-profile v3 mechanism plus the 2026-07-27 through 2026-07-31 Sungrow backfill are sealed at 6d0d2251810b9d04d78386f7bc6271e5233e9611. Memory still grants no trading, Git, business-state, review-verdict, Phase C downstream, automated weekly (2026-07-31), or four-day automated weekly candidate authority. The production validator remains deferred; provenance_migration_v1 remains design-only with current implementation value NOT_WORTH_BUILDING. Push still requires separate explicit user authorization.

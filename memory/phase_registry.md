@@ -46,24 +46,26 @@ implementation_status: implemented
 validation_status: validated
 closure_status: closed
 closure_scope: implementation
-relationship: extends_phase_a
+relationship: extends_phase_a; hardened_by_method_profile_v3
 superseded_by: null
-rule_paths: [rules/run_daily_facts_after_close_phase_b_v0.2.md]
+rule_paths: [rules/run_daily_facts_after_close_phase_b_v0.3.md]
 implementation_paths: [tools/run_daily_facts_after_close.py, tools/official_facts_transaction.py, tools/phase_b_completion.py]
 test_paths: [tests/test_run_daily_facts_after_close.py]
-validation_paths: [reports/validation/run_daily_facts_after_close_phase_b_final_2026-07-16.md]
-sealing_commit: 034673f5457f1f52b64e19f249e70086ffbb529b
+validation_paths: [reports/validation/run_daily_facts_after_close_phase_b_final_2026-07-16.md, reports/validation/semantic_noop_method_profile_v3_closure_candidate_2026-08-05.md, reports/validation/sungrow_daily_facts_backfill_2026-07-27_2026-07-31_validation.md]
+sealing_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611
 dependencies: [A]
 downstream_permissions: []
 deferred_items: []
 next_allowed_action: evidence_refresh
 evidence:
-  - {path: rules/run_daily_facts_after_close_phase_b_v0.2.md, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 65ae9a711fb6e3785c9e58deb7d1eaa46908be0e64808425843c1110369c1813, role: rule}
-  - {path: tools/run_daily_facts_after_close.py, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: ea383fd67eb0e05235fb1ec0592e09dd7540642bbdccd59ba06094892cb6bfbe, role: implementation}
-  - {path: tools/official_facts_transaction.py, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: ccf89703590f48916c4630f098ed610997cbe43f1e02daa8cbe61ea80f8b8397, role: implementation}
-  - {path: tools/phase_b_completion.py, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 6628f70ce7cef35eaf8b7884c6fba8c1f2b769ee5e133195973f67dafca4f292, role: implementation}
-  - {path: tests/test_run_daily_facts_after_close.py, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 06a66bbd90776ad437fa94ea75f205ec110e8c84a70ffa4e1e62c488b4c9019b, role: test}
-  - {path: reports/validation/run_daily_facts_after_close_phase_b_final_2026-07-16.md, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 42be442b6a0d326c0d9c0f280f2de7e10e2f2afacba339e6f2286dfaadab25ba, role: final_validation}
+  - {path: rules/run_daily_facts_after_close_phase_b_v0.3.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 06423196570392aa7bbd19d2afbc6427794371c6bd36053a6ecf27af49aeec7b, role: rule}
+  - {path: tools/run_daily_facts_after_close.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: ea383fd67eb0e05235fb1ec0592e09dd7540642bbdccd59ba06094892cb6bfbe, role: implementation}
+  - {path: tools/official_facts_transaction.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 8b77eabd0a92a9fd83ea7844e68f1445a501d40543bb12d845d7cc41b406c178, role: implementation}
+  - {path: tools/phase_b_completion.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 01317abf8b665f06897e4ddfb8456e39e33e6c0be0e70f11f3d67e90a0b994ed, role: implementation}
+  - {path: tests/test_run_daily_facts_after_close.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 81bb1bbf71119223f505fa16d1dec86aedc1d6b75273bb110a5e4b80ba95926e, role: test}
+  - {path: reports/validation/run_daily_facts_after_close_phase_b_final_2026-07-16.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 42be442b6a0d326c0d9c0f280f2de7e10e2f2afacba339e6f2286dfaadab25ba, role: historical_final_validation}
+  - {path: reports/validation/semantic_noop_method_profile_v3_closure_candidate_2026-08-05.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 6e0d96369925b0c225343beefc55fcbb4c38186b56a4129375d81ac25a1799f6, role: v3_closure_validation}
+  - {path: reports/validation/sungrow_daily_facts_backfill_2026-07-27_2026-07-31_validation.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 3a0b2b413a3cf5dbd0a45e9b6462e6607ba30c471bc0934fe8dbf8ab76939abb, role: facts_backfill_validation}
 ```
 
 ## C
@@ -79,55 +81,70 @@ implementation_status: implemented
 validation_status: validated
 closure_status: closed
 closure_scope: implementation
-relationship: reserves_phase_d_without_implementation
+relationship: reserves_phase_d_without_implementation; hardened_by_method_profile_v3
 superseded_by: null
-rule_paths: [rules/review_manifest_phase_c_v0.2.md]
+rule_paths: [rules/review_manifest_phase_c_v0.3.md]
 implementation_paths: [tools/review_manifest.py, tools/generate_review_manifest.py]
 test_paths: [tests/test_review_manifest.py]
-validation_paths: [reports/validation/review_manifest_phase_c_final_matrix_review_2026-07-20.md]
-sealing_commit: 0e45c6611c55d5f1dd11f4bd1e8156a3295299f5
+validation_paths: [reports/validation/review_manifest_phase_c_final_matrix_review_2026-07-20.md, reports/validation/semantic_noop_method_profile_v3_closure_candidate_2026-08-05.md, reports/validation/sungrow_daily_review_backfill_2026-07-27_2026-07-31_validation.md]
+sealing_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611
 dependencies: [B]
 downstream_permissions: []
 deferred_items: [Phase D archaeology]
 next_allowed_action: evidence_refresh
 evidence:
-  - {path: rules/review_manifest_phase_c_v0.2.md, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 1d9ed3101594b12cea127f459b6e195d94098912fa6308508be74d1f441b0cc8, role: rule}
-  - {path: tools/review_manifest.py, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: fa7b6fb47588a9df2561fd6967d5a16db24f6c72e76b40c00cfd9f700ebcd8b7, role: implementation}
-  - {path: tools/generate_review_manifest.py, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 9388f88ec7252d09b4a082617c4ec0dae9922600a05d0661c25daa17e859504a, role: implementation}
-  - {path: tests/test_review_manifest.py, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: a6e66162b7c26462c98ff9e4a53c64e4efb3c59872ec473e8af30160a777c943, role: test}
-  - {path: reports/validation/review_manifest_phase_c_final_matrix_review_2026-07-20.md, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 5c7d1d590c0529b70289f659b3f9ba6b510f73b1116f577f2b3f4890d8b0ee9c, role: final_validation}
+  - {path: rules/review_manifest_phase_c_v0.3.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 3840735711c5033c010d53f1b2318eb1bb7676ddf05350367e27a7204ef63279, role: rule}
+  - {path: tools/review_manifest.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: dd2f8fb6e73592344beb146beee7366a21d084e59975c64ecee90db0d36c01a2, role: implementation}
+  - {path: tools/generate_review_manifest.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 9388f88ec7252d09b4a082617c4ec0dae9922600a05d0661c25daa17e859504a, role: implementation}
+  - {path: tests/test_review_manifest.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 5fb8b13e436802bbfd6b308112883655a5e24a6cfe9ad2003bd08e914b2e46f1, role: test}
+  - {path: reports/validation/review_manifest_phase_c_final_matrix_review_2026-07-20.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 5c7d1d590c0529b70289f659b3f9ba6b510f73b1116f577f2b3f4890d8b0ee9c, role: historical_final_validation}
+  - {path: reports/validation/semantic_noop_method_profile_v3_closure_candidate_2026-08-05.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 6e0d96369925b0c225343beefc55fcbb4c38186b56a4129375d81ac25a1799f6, role: v3_closure_validation}
+  - {path: reports/validation/sungrow_daily_review_backfill_2026-07-27_2026-07-31_validation.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 6fb05d1b75b3a4cbb7181e0da7cad2f6876c236214b09af8370d1bee96a8fbc1, role: review_backfill_validation}
 ```
 
 ## semantic_noop
 
 ```yaml
 phase_id: semantic_noop
-name: semantic_noop mechanism
+name: semantic_noop method-profile v3 mechanism
 scope: mechanism
 work_status: completed
 completed_scopes: [mechanism, validation, closure]
-design_status: not_applicable
+design_status: frozen_design
 implementation_status: implemented
 validation_status: validated
 closure_status: closed
 closure_scope: mechanism
 relationship: completion_mechanism_within_phase_b
 superseded_by: null
-rule_paths: [rules/run_daily_facts_after_close_phase_b_v0.2.md]
-implementation_paths: [tools/phase_b_completion.py]
-test_paths: [tests/test_run_daily_facts_after_close.py]
-validation_paths: [reports/validation/semantic_noop_completion_fix_final_review_2026-07-26.md]
-sealing_commit: 088a5e8849047e3ce6db3fe3b6a87b1e3542aebf
+rule_paths: [rules/run_daily_facts_after_close_phase_b_v0.3.md, rules/review_manifest_phase_c_v0.3.md]
+implementation_paths: [tools/official_facts_transaction.py, tools/phase_b_completion.py, tools/review_manifest.py, rules/semantic_noop_timestamp_profiles_v0.3.json, rules/semantic_noop_timestamp_profile_registry_v0.1.json]
+test_paths: [tests/test_run_daily_facts_after_close.py, tests/test_review_manifest.py]
+validation_paths: [reports/validation/semantic_noop_method_profile_v3_candidate_2026-08-04.md, reports/validation/semantic_noop_profile_identity_durability_2026-08-04.md, reports/validation/semantic_noop_method_profile_v3_closure_candidate_2026-08-05.md, reports/validation/sungrow_daily_facts_backfill_2026-07-27_2026-07-31_validation.md, reports/validation/sungrow_daily_review_backfill_2026-07-27_2026-07-31_validation.md, reports/validation/artifacts/cross_method_provenance_fable_review_2026-08-05/manifest.json]
+sealing_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611
 dependencies: [B, C]
 downstream_permissions: []
-deferred_items: []
+deferred_items: [provenance_migration_v1 design-only, 2026-07-31 automation authority unavailable]
 next_allowed_action: evidence_refresh
 evidence:
-  - {path: rules/run_daily_facts_after_close_phase_b_v0.2.md, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 65ae9a711fb6e3785c9e58deb7d1eaa46908be0e64808425843c1110369c1813, role: rule}
-  - {path: tools/phase_b_completion.py, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 6628f70ce7cef35eaf8b7884c6fba8c1f2b769ee5e133195973f67dafca4f292, role: implementation}
-  - {path: tests/test_run_daily_facts_after_close.py, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 06a66bbd90776ad437fa94ea75f205ec110e8c84a70ffa4e1e62c488b4c9019b, role: test}
-  - {path: reports/validation/semantic_noop_completion_fix_final_review_2026-07-26.md, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 354c4bc6bdcc6670d77bd18cc7ddb161971340e892f1977c1ce2418ebb95b9bc, role: final_validation}
+  - {path: rules/run_daily_facts_after_close_phase_b_v0.3.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 06423196570392aa7bbd19d2afbc6427794371c6bd36053a6ecf27af49aeec7b, role: rule}
+  - {path: rules/review_manifest_phase_c_v0.3.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 3840735711c5033c010d53f1b2318eb1bb7676ddf05350367e27a7204ef63279, role: rule}
+  - {path: tools/official_facts_transaction.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 8b77eabd0a92a9fd83ea7844e68f1445a501d40543bb12d845d7cc41b406c178, role: implementation}
+  - {path: tools/phase_b_completion.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 01317abf8b665f06897e4ddfb8456e39e33e6c0be0e70f11f3d67e90a0b994ed, role: implementation}
+  - {path: tools/review_manifest.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: dd2f8fb6e73592344beb146beee7366a21d084e59975c64ecee90db0d36c01a2, role: implementation}
+  - {path: rules/semantic_noop_timestamp_profiles_v0.3.json, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 310597913948359642bc9deb20420c22dc698bf225cb7c403122c4caec49d23c, role: timestamp_profile_data}
+  - {path: rules/semantic_noop_timestamp_profile_registry_v0.1.json, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 7432e3cce819b72995ca01499d7d957679d7469c8139e5bec216a393f646c12b, role: timestamp_profile_registry}
+  - {path: tests/test_run_daily_facts_after_close.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 81bb1bbf71119223f505fa16d1dec86aedc1d6b75273bb110a5e4b80ba95926e, role: test}
+  - {path: tests/test_review_manifest.py, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 5fb8b13e436802bbfd6b308112883655a5e24a6cfe9ad2003bd08e914b2e46f1, role: test}
+  - {path: reports/validation/semantic_noop_method_profile_v3_candidate_2026-08-04.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: e7b542778c57219647e9e0bdbb0951f45d25981edb2bd907ad6a4b6ab661e467, role: v3_candidate_validation}
+  - {path: reports/validation/semantic_noop_profile_identity_durability_2026-08-04.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: ab7b9ac8aab5170c2245aed075f37f594f758771bad143eb6f1c1446a369eefb, role: identity_durability_validation}
+  - {path: reports/validation/semantic_noop_method_profile_v3_closure_candidate_2026-08-05.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 6e0d96369925b0c225343beefc55fcbb4c38186b56a4129375d81ac25a1799f6, role: v3_closure_validation}
+  - {path: reports/validation/sungrow_daily_facts_backfill_2026-07-27_2026-07-31_validation.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 3a0b2b413a3cf5dbd0a45e9b6462e6607ba30c471bc0934fe8dbf8ab76939abb, role: facts_backfill_validation}
+  - {path: reports/validation/sungrow_daily_review_backfill_2026-07-27_2026-07-31_validation.md, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 6fb05d1b75b3a4cbb7181e0da7cad2f6876c236214b09af8370d1bee96a8fbc1, role: review_backfill_validation}
+  - {path: reports/validation/artifacts/cross_method_provenance_fable_review_2026-08-05/manifest.json, snapshot_kind: commit, snapshot_commit: 6d0d2251810b9d04d78386f7bc6271e5233e9611, raw_sha256: 06a5547ebe9f8093e98927037ad3cd4ed1065d652be1a6f27fea076f8c3c5af1, role: cross_method_provenance_manifest}
 ```
+
+`semantic_noop` grants no trading, Git, Phase C downstream, automated weekly (2026-07-31), or four-day automated weekly candidate authority.
 
 ## SWP
 
@@ -236,4 +253,3 @@ next_allowed_action: separate_design
 evidence:
   - {path: rules/review_manifest_phase_c_v0.2.md, snapshot_kind: commit, snapshot_commit: bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca, raw_sha256: 1d9ed3101594b12cea127f459b6e195d94098912fa6308508be74d1f441b0cc8, role: reservation_rule}
 ```
-
