@@ -8,7 +8,7 @@ This record closes and preserves the Project Memory v0.1 r5 design. It does not 
 
 - `PROJECT_MEMORY_V0.1_DESIGN=FROZEN`
 - `design version=r5`
-- `base head=bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca`
+- `base head=5651b07b40bfb5c52bbccffbc031fbe712cffe4c`
 - `design package SHA=64dfa32ad9573bfdea074b7731c2dace324b693bc8e47dcbfe4dc8d37a3f9bfd`
 - `sealed payload count=17`
 - `sealed artifact count=16`

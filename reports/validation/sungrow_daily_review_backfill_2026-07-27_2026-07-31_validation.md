@@ -7,7 +7,7 @@
 | `symbol` | `300274` |
 | `name` | 阳光电源 |
 | `date_range` | `2026-07-27` → `2026-07-31` |
-| `as_of_head` | `6432855b001dee50332ecd402affa8421c3cab81` |
+| `as_of_head` | `1ecfb2fd932230ac86bd890797c15fa7fa37b431` |
 | `runtime_root` | repository-external |
 
 2026-07-27 through 2026-07-30 reviews are bound to the authoritative Phase C

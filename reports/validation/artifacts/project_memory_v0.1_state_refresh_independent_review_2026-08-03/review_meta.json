@@ -6,7 +6,7 @@
   "reported_model": "Kimi Code",
   "terminal_runtime_label": "CUN Kimi K3 thinking",
   "model_identity_evidence": "terminal transcript",
-  "reviewed_head": "f38b563502fa7e098f8420062c5b71f9fb231fdf",
+  "reviewed_head": "b4af83aa18ffa2520630d484aa5a26e9590a2876",
   "candidate_files": [
     {
       "path": "memory/project_state.md",

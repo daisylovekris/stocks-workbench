@@ -4,12 +4,12 @@
 
 | Field | Value |
 |---|---|
-| `head_checked` | `f38b563502fa7e098f8420062c5b71f9fb231fdf` |
+| `head_checked` | `b4af83aa18ffa2520630d484aa5a26e9590a2876` |
 | `as_of_date` | `2026-08-03` |
-| `design_closure_commit` | `d33a7cfd39a8608524096021ae581a6825bc5cc4` |
-| `implementation_commit` | `e1723c26efb76bee2aa2b879233a738f4e7e2323` |
-| `closure_commit` | `844d8b541d7fd3165ce9e9a1725f207e1764da51` |
-| `provenance_remediation_commit` | `f38b563502fa7e098f8420062c5b71f9fb231fdf` |
+| `design_closure_commit` | `5e8c1a39dcc81697e3d46ff244162d64290e2b11` |
+| `implementation_commit` | `d5d971d4e45dc0104f949edf08357703afdcbc6a` |
+| `closure_commit` | `5909dd40976ad81f479c8e73b783829a503c83e8` |
+| `provenance_remediation_commit` | `b4af83aa18ffa2520630d484aa5a26e9590a2876` |
 
 This is a worktree-only state-refresh candidate. It records verified commit-bound evidence for the Project Memory v0.1 implementation closure and the isolated provenance revalidation. It grants no staging, commit, push, trading, business-state, or review-verdict authority.
 
@@ -17,7 +17,7 @@ This is a worktree-only state-refresh candidate. It records verified commit-boun
 
 ### Repository state
 
-- HEAD matches `f38b563502fa7e098f8420062c5b71f9fb231fdf`.
+- HEAD matches `b4af83aa18ffa2520630d484aa5a26e9590a2876`.
 - Only two Memory files are modified: `memory/project_state.md`, `memory/phase_registry.md`.
 - All four authority commits referenced exist as commit objects.
 - No future commit SHA is referenced (no state-refresh commit SHA is pre-filled).
@@ -34,7 +34,7 @@ The metadata table retains the fixed field set: `schema_version`, `as_of_commit`
 
 Updated values:
 
-- `as_of_commit` = `f38b563502fa7e098f8420062c5b71f9fb231fdf`
+- `as_of_commit` = `b4af83aa18ffa2520630d484aa5a26e9590a2876`
 - `as_of_date` = `2026-08-03`
 - `current_milestone` = `Project Memory v0.1 implementation closed`
 - `work_status` = `completed`
@@ -64,7 +64,7 @@ The Phase set remains exactly seven: `A`, `B`, `C`, `semantic_noop`, `SWP`, `pro
 | `closure_scope` | `implementation` |
 | `relationship` | `follows_swp_design_closure` |
 | `superseded_by` | `null` |
-| `sealing_commit` | `844d8b541d7fd3165ce9e9a1725f207e1764da51` |
+| `sealing_commit` | `5909dd40976ad81f479c8e73b783829a503c83e8` |
 | `dependencies` | `[SWP]` |
 | `downstream_permissions` | `[]` |
 | `deferred_items` | `[production validator implementation]` |
@@ -107,17 +107,17 @@ All `raw_sha256` values were recomputed from the corresponding `commit:path` byt
 
 Evidence snapshot_commit mapping:
 
-- 13 implementation paths → `e1723c26efb76bee2aa2b879233a738f4e7e2323`
-- `implementation_candidate` report → `e1723c26efb76bee2aa2b879233a738f4e7e2323`
-- `historical_implementation_review_report_independence_superseded` and `historical_closure_delta_review_report_independence_superseded`, plus `final_closure` report and `closure_manifest` → `844d8b541d7fd3165ce9e9a1725f207e1764da51`
-- `provenance_revalidation` report, `gpt55_high_isolated_output.md`, `review_meta.json` → `f38b563502fa7e098f8420062c5b71f9fb231fdf`
+- 13 implementation paths → `d5d971d4e45dc0104f949edf08357703afdcbc6a`
+- `implementation_candidate` report → `d5d971d4e45dc0104f949edf08357703afdcbc6a`
+- `historical_implementation_review_report_independence_superseded` and `historical_closure_delta_review_report_independence_superseded`, plus `final_closure` report and `closure_manifest` → `5909dd40976ad81f479c8e73b783829a503c83e8`
+- `provenance_revalidation` report, `gpt55_high_isolated_output.md`, `review_meta.json` → `b4af83aa18ffa2520630d484aa5a26e9590a2876`
 
 ### Provenance role semantics
 
 - The two historical review reports (`project_memory_v0.1_implementation_independent_review_2026-08-02.md` and `project_memory_v0.1_implementation_closure_delta_review_2026-08-02.md`) are retained as evidence.
 - Their `independent`-provenance claims have been superseded by the isolated provenance revalidation.
 - Their `role` fields explicitly carry the `independence_superseded` marker: `historical_implementation_review_report_independence_superseded` and `historical_closure_delta_review_report_independence_superseded`.
-- The current independent provenance authority comes from the isolated provenance revalidation, comprising: the provenance revalidation report, the isolated output (`gpt55_high_isolated_output.md`), and the review metadata (`review_meta.json`), all snapshot-bound to `f38b563502fa7e098f8420062c5b71f9fb231fdf`.
+- The current independent provenance authority comes from the isolated provenance revalidation, comprising: the provenance revalidation report, the isolated output (`gpt55_high_isolated_output.md`), and the review metadata (`review_meta.json`), all snapshot-bound to `b4af83aa18ffa2520630d484aa5a26e9590a2876`.
 - The two historical reports' `path`, `snapshot_kind`, `snapshot_commit`, and `raw_sha256` values are unchanged; only the `role` strings were modified.
 
 ### Provenance and cleanliness

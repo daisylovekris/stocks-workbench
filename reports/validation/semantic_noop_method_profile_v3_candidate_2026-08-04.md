@@ -2,7 +2,7 @@
 
 ## Context
 
-HEAD: `6432855b001dee50332ecd402affa8421c3cab81`
+HEAD: `1ecfb2fd932230ac86bd890797c15fa7fa37b431`
 
 This candidate implements the Fable external architecture verdict
 `REQUIRE_METHOD_AWARE_PROFILES` for semantic_noop: the dynamic recursive v2
@@ -27,7 +27,7 @@ reports/validation/artifacts/semantic_noop_timestamp_paths_v2_fable_review_2026-
 - Fable report SHA：`002d9e49723a1f4bde0b1d7760299e83fb614408a2a49d214a487bc311601dfd`（与 `fable_raw.md` 字节一致）
 - architecture verdict：`REQUIRE_METHOD_AWARE_PROFILES`
 - P1=1 / P2=3 / P3=1
-- HEAD before/after：`6432855b001dee50332ecd402affa8421c3cab81`
+- HEAD before/after：`1ecfb2fd932230ac86bd890797c15fa7fa37b431`
 - status SHA before/after：`0058444cbdf53b1021168c79dc90f35bee49f8e9240d05f07057bc7801dd131f`
 - Key 已由用户删除；原审查为只读。
 - 原 v2 candidate 报告字节未被修改。

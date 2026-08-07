@@ -1,6 +1,6 @@
 {
   "schema_version": "project_memory_v0.1.design_manifest.v0.1",
-  "base_head": "bcda233a3c06a1f875a01843d2b3f5a4cec2c1ca",
+  "base_head": "5651b07b40bfb5c52bbccffbc031fbe712cffe4c",
   "content_closure_ready": true,
   "sealing_ready": true,
   "sealed_payload_count": 17,

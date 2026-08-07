@@ -9,7 +9,7 @@
 | `date_range` | `2026-07-27` → `2026-07-31` |
 | `mode` | `historical_backfill` |
 | `reason` | `User-authorized overdue facts backfill for the 2026-07-27 through 2026-07-31 review chain` |
-| `as_of_head` | `6432855b001dee50332ecd402affa8421c3cab81` |
+| `as_of_head` | `1ecfb2fd932230ac86bd890797c15fa7fa37b431` |
 | `runtime_root` | repository-external |
 
 Current true state: all five official facts files are valid. 2026-07-27 through

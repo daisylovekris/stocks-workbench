@@ -2,9 +2,9 @@
 
 ## Scope and HEAD identity
 
-This report validates the first worktree-only Project Memory v0.1 implementation candidate against the design frozen by closure commit `d33a7cfd39a8608524096021ae581a6825bc5cc4`.
+This report validates the first worktree-only Project Memory v0.1 implementation candidate against the design frozen by closure commit `5e8c1a39dcc81697e3d46ff244162d64290e2b11`.
 
-- `HEAD=d33a7cfd39a8608524096021ae581a6825bc5cc4`
+- `HEAD=5e8c1a39dcc81697e3d46ff244162d64290e2b11`
 - `current_branch=workbench/mainline-2026-07`
 - `validation_date=2026-08-02`
 - `memory_file_count=13`
@@ -39,7 +39,7 @@ The set contains no extra file. In particular, it contains no `memory/manifest.j
 - ADR set: `ADR-0001` through `ADR-0009` with no gap or extra record.
 - ADR statuses: 0001-0005 and 0007 remain `proposed`; 0006, 0008, and 0009 remain `accepted`.
 
-The Project Memory phase has the required implementation-candidate state: frozen design, implementation in progress, implementation validation not started, design closure closed at `d33a7cfd39a8608524096021ae581a6825bc5cc4`, no downstream permissions, and next action `implementation_validation`.
+The Project Memory phase has the required implementation-candidate state: frozen design, implementation in progress, implementation validation not started, design closure closed at `5e8c1a39dcc81697e3d46ff244162d64290e2b11`, no downstream permissions, and next action `implementation_validation`.
 
 The Pi Fable primary record continues to represent only the frozen SWP observed run at low effort, `1.004 USD/run`, and `101 seconds`. The Project Memory r5 external review remains navigable through the existing project_memory Phase evidence, project_state design-closure reference, final closure report, and committed Fable raw review and run_meta. The failed CUN Pi diagnostic remains excluded diagnostics prose only.
 
@@ -68,7 +68,7 @@ For every object, validation confirmed:
 - the role is non-empty;
 - no source ID, alias, worktree identity, absolute path, or future implementation commit substitutes for the full object.
 
-The final Project Memory design closure report, closure manifest, r5 design manifest, Fable raw review, and Fable run metadata are all bound to the pre-existing design closure commit `d33a7cfd39a8608524096021ae581a6825bc5cc4`.
+The final Project Memory design closure report, closure manifest, r5 design manifest, Fable raw review, and Fable run metadata are all bound to the pre-existing design closure commit `5e8c1a39dcc81697e3d46ff244162d64290e2b11`.
 
 P1/P2/P3 were recomputed from the committed Fable raw review and committed run metadata; both sources report `0/0/0`.
 
@@ -83,7 +83,7 @@ P1/P2/P3 were recomputed from the committed Fable raw review and committed run m
 
 ## Git and implementation boundary
 
-- Git HEAD remained `d33a7cfd39a8608524096021ae581a6825bc5cc4`.
+- Git HEAD remained `5e8c1a39dcc81697e3d46ff244162d64290e2b11`.
 - Git index remained empty.
 - No commit or push was performed.
 - No production validator was created or implemented.

@@ -4,7 +4,7 @@
   "reasoning_effort": "high",
   "provider": "chatgpt-http",
   "review_scope": "Project Memory v0.1 implementation candidate",
-  "reviewed_head": "d33a7cfd39a8608524096021ae581a6825bc5cc4",
+  "reviewed_head": "5e8c1a39dcc81697e3d46ff244162d64290e2b11",
   "memory_file_count": 13,
   "evidence_object_count": 66,
   "p1_count": 0,

@@ -2,7 +2,7 @@
 
 ## Context
 
-HEAD: `6432855b001dee50332ecd402affa8421c3cab81`
+HEAD: `1ecfb2fd932230ac86bd890797c15fa7fa37b431`
 
 This round hardens semantic_noop method-profile v3 historical identity lifetime
 and configuration parsing per K3 final review (1 P2 + 2 P3).  The v0.3 profile

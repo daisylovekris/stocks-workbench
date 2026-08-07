@@ -4,7 +4,7 @@
 
 - 仓库：`/Users/wongdaisy/Mimo-Lab/stocks`
 - 分支：`workbench/mainline-2026-07`
-- 预期/实际 HEAD：`6432855b001dee50332ecd402affa8421c3cab81`
+- 预期/实际 HEAD：`1ecfb2fd932230ac86bd890797c15fa7fa37b431`
 - 范围：semantic_noop method-profile v3 机制 + 阳光电源 2026-07-27 至 2026-07-31
   封箱候选收口。本轮仅文档与外审归档；未修改生产代码、测试、规则配置与
   official facts；未生成 runtime；未暂存/commit/push。

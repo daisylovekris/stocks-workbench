@@ -2,7 +2,7 @@
 
 ## Scope
 
-This candidate revalidates the Project Memory v0.1 implementation commit `e1723c26efb76bee2aa2b879233a738f4e7e2323` and scoped closure commit `844d8b541d7fd3165ce9e9a1725f207e1764da51`. It is a read-only provenance review. It grants no staging, commit, push, trading, review-verdict, or business-state authority.
+This candidate revalidates the Project Memory v0.1 implementation commit `d5d971d4e45dc0104f949edf08357703afdcbc6a` and scoped closure commit `5909dd40976ad81f479c8e73b783829a503c83e8`. It is a read-only provenance review. It grants no staging, commit, push, trading, review-verdict, or business-state authority.
 
 ## Historical contamination finding
 
@@ -37,7 +37,7 @@ The complete runtime identity and isolation configuration are recorded in `repor
 
 The isolated review independently recomputed:
 
-- implementation parent `d33a7cfd39a8608524096021ae581a6825bc5cc4` and subject `Implement Project Memory v0.1`;
+- implementation parent `5e8c1a39dcc81697e3d46ff244162d64290e2b11` and subject `Implement Project Memory v0.1`;
 - exactly 17 implementation paths and exactly 13 `memory/` files;
 - all 66 formal evidence objects, with `git show snapshot_commit:path` success and exact SHA-256 identity for every object;
 - zero evidence identity failures;
@@ -47,7 +47,7 @@ The isolated review independently recomputed:
 
 The isolated review independently confirmed:
 
-- closure parent `e1723c26efb76bee2aa2b879233a738f4e7e2323` and subject `Seal Project Memory v0.1 implementation closure`;
+- closure parent `d5d971d4e45dc0104f949edf08357703afdcbc6a` and subject `Seal Project Memory v0.1 implementation closure`;
 - exactly 6 closure paths;
 - final closure report and manifest agreement on implementation identities, package identity, and sealed state;
 - `implementation_closed=true`;

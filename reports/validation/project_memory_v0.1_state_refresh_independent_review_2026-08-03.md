@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| `reviewed_head` | `f38b563502fa7e098f8420062c5b71f9fb231fdf` |
+| `reviewed_head` | `b4af83aa18ffa2520630d484aa5a26e9590a2876` |
 | `reported_model` | `Kimi Code` |
 | `terminal_runtime_label` | `CUN Kimi K3 thinking` |
 | `model_identity_evidence` | `terminal transcript` |
@@ -25,7 +25,7 @@ These files were byte-frozen for this review: their size and SHA-256 were captur
 ## Review findings
 
 1. The review objects are the three frozen candidate files listed above.
-2. The reviewed HEAD is `f38b563502fa7e098f8420062c5b71f9fb231fdf`.
+2. The reviewed HEAD is `b4af83aa18ffa2520630d484aa5a26e9590a2876`.
 3. The reported review model is Kimi Code.
 4. The terminal runtime label is `CUN Kimi K3 thinking`.
 5. Model identity evidence is terminal transcript only; it is not overstated as underlying metadata verification.
@@ -36,7 +36,7 @@ These files were byte-frozen for this review: their size and SHA-256 were captur
 10. Implementation path count = 13.
 11. Validation path count = 6.
 12. Historical independence claims are marked superseded; superseded independence claim count = 2 (roles `historical_implementation_review_report_independence_superseded` and `historical_closure_delta_review_report_independence_superseded`).
-13. Current isolated provenance object count = 3 (provenance revalidation report, isolated output, review metadata, all snapshot-bound to `f38b563502fa7e098f8420062c5b71f9fb231fdf`).
+13. Current isolated provenance object count = 3 (provenance revalidation report, isolated output, review metadata, all snapshot-bound to `b4af83aa18ffa2520630d484aa5a26e9590a2876`).
 14. Future commit SHA references = 0; absolute machine paths = 0; symbolic evidence = 0; authority grants = 0.
 15. P1/P2/P3 = 0/0/0.
 16. Verdict = PASS.

@@ -3,9 +3,9 @@
   "review_type": "isolated_implementation_and_closure_provenance_revalidation",
   "created_at_utc": "2026-08-02T15:29:25Z",
   "repository": ".",
-  "source_head": "844d8b541d7fd3165ce9e9a1725f207e1764da51",
-  "implementation_commit": "e1723c26efb76bee2aa2b879233a738f4e7e2323",
-  "closure_commit": "844d8b541d7fd3165ce9e9a1725f207e1764da51",
+  "source_head": "5909dd40976ad81f479c8e73b783829a503c83e8",
+  "implementation_commit": "d5d971d4e45dc0104f949edf08357703afdcbc6a",
+  "closure_commit": "5909dd40976ad81f479c8e73b783829a503c83e8",
   "implementation_package_sha256_expected": "53baa96909e9bf84550f46d28435565613d94cbeda7af9468f72a5b3fd168fed",
   "runtime_identity": {
     "cli": "codex-cli 0.145.0",
@@ -26,7 +26,7 @@
       "auth.json"
     ],
     "user_config_present": false,
-    "repository_clone_head": "844d8b541d7fd3165ce9e9a1725f207e1764da51",
+    "repository_clone_head": "5909dd40976ad81f479c8e73b783829a503c83e8",
     "repository_clone_index_empty": true,
     "repository_directory_mode": "dr-xr-xr-x",
     "sandbox": {

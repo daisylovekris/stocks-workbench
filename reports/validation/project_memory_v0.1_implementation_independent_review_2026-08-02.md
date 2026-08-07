@@ -2,7 +2,7 @@
 
 ## Scope
 
-This archive preserves the final read-only independent review of the 13-file Project Memory v0.1 implementation candidate and its worktree validation report. The reviewed HEAD was `d33a7cfd39a8608524096021ae581a6825bc5cc4`.
+This archive preserves the final read-only independent review of the 13-file Project Memory v0.1 implementation candidate and its worktree validation report. The reviewed HEAD was `5e8c1a39dcc81697e3d46ff244162d64290e2b11`.
 
 The review did not modify the candidate, stage files, commit, or push. It did not review or admit any full Codex rollout JSONL as repository content.
 

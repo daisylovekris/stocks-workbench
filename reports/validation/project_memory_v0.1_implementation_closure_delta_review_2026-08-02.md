@@ -3,7 +3,7 @@
 ## Review scope
 
 - Review scope: Project Memory v0.1 implementation closure delta review
-- Reviewed HEAD: `e1723c26efb76bee2aa2b879233a738f4e7e2323`
+- Reviewed HEAD: `d5d971d4e45dc0104f949edf08357703afdcbc6a`
 - Actual model: `gpt-5.5`
 - Reasoning effort: `high`
 - Provider/runtime: `chatgpt-http` / Codex runtime
