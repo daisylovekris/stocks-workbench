@@ -1,0 +1,11 @@
+{
+  "review_date": "2026-08-07",
+  "model": "anthropic/claude-fable-5",
+  "provider": "ZenMux via Pi",
+  "thinking": "low",
+  "scope": "sealed migration contract and secret scanner hardening",
+  "prompt_sha256": "b3d64abb429487639942b49c6a3501d5d4b99695597c09e35f8ed4309df45f45",
+  "output_sha256": "888d611c58ba2253873c8efe2ac4b1349ee1eb651003b38b3e94ab0de60a06f5",
+  "events_archived": false,
+  "credential_values_present": false
+}

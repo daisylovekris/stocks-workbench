@@ -1,19 +1,22 @@
 #!/bin/sh
-# 同源密钥扫描：待推送提交命中即拒绝 push（fail closed）
+# 同源密钥扫描：扫描每个待推送 ref 的 newly reachable blob；命中即拒绝 push。
 # stdin 行格式: <local ref> <local sha> <remote ref> <remote sha>
 root="$(cd "$(dirname "$0")/.." && pwd)"
 all_zero="0000000000000000000000000000000000000000"
 
 while read -r _local_ref local_sha _remote_ref remote_sha; do
-    if [ -z "$local_sha" ]; then
+    if [ -z "$local_sha" ] || [ "$local_sha" = "$all_zero" ]; then
         continue
     fi
+
     if [ "$remote_sha" = "$all_zero" ]; then
-        base="$(git hash-object -t tree /dev/null)"
+        revset="$local_sha"
     else
-        base="$remote_sha"
+        revset="$remote_sha..$local_sha"
     fi
-    python3 "$root/tools/secret_scan.py" --commits "$base..$local_sha" || exit 1
+
+    python3 "$root/tools/secret_scan.py" --commits "$revset" || exit 1
+    python3 "$root/tools/validate_history_sanitization.py" --repo "$root" --rev "$local_sha" || exit 1
 done
 
 exit 0
