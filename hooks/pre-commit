@@ -1,0 +1,4 @@
+#!/bin/sh
+# 同源密钥扫描：暂存内容命中即拒绝提交（fail closed）
+root="$(cd "$(dirname "$0")/.." && pwd)"
+exec python3 "$root/tools/secret_scan.py" --staged
