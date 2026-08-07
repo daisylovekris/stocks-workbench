@@ -1,0 +1,44 @@
+{
+  "date": "2026-08-07",
+  "model": "anthropic/claude-fable-5",
+  "provider": "ZenMux via Pi",
+  "thinking": "low",
+  "review_role": "read-only external architecture reviewer",
+  "credential_values_present": false,
+  "initial_verdict": {
+    "sealed_contract": "ACCEPT",
+    "scanner_architecture": "ACCEPT",
+    "p1": 0,
+    "p2": 2,
+    "p3": 2
+  },
+  "followup_verdict": {
+    "sealed_contract": "ACCEPT",
+    "prefix_only_archive_exception": "ACCEPT",
+    "operational_identity_gate": "PASS",
+    "allowlist_negative_test_gate": "PASS",
+    "p1": 0,
+    "p2": 0,
+    "p3": 1,
+    "ready_for_hardening_commit": true,
+    "ready_for_push_without_workflow": true
+  },
+  "files": {
+    "initial_prompt.md": {
+      "size_bytes": 6313,
+      "sha256": "b3d64abb429487639942b49c6a3501d5d4b99695597c09e35f8ed4309df45f45"
+    },
+    "initial_raw.md": {
+      "size_bytes": 3785,
+      "sha256": "888d611c58ba2253873c8efe2ac4b1349ee1eb651003b38b3e94ab0de60a06f5"
+    },
+    "followup_prompt.md": {
+      "size_bytes": 3038,
+      "sha256": "d1bc4627cbe857db2ed2ce181fb20235a31aa894cf1d79048c9e988b074b7955"
+    },
+    "followup_raw.md": {
+      "size_bytes": 1696,
+      "sha256": "2abad5000afef6192e2925bded5ac469e8a053e127082e4f8cfed533513eb2ae"
+    }
+  }
+}

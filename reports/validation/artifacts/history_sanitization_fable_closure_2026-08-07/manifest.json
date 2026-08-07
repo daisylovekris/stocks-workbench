@@ -1,0 +1,22 @@
+{
+  "initial_prompt.md": {
+    "size_bytes": 6313,
+    "sha256": "b3d64abb429487639942b49c6a3501d5d4b99695597c09e35f8ed4309df45f45"
+  },
+  "initial_raw.md": {
+    "size_bytes": 3785,
+    "sha256": "888d611c58ba2253873c8efe2ac4b1349ee1eb651003b38b3e94ab0de60a06f5"
+  },
+  "followup_prompt.md": {
+    "size_bytes": 3038,
+    "sha256": "d1bc4627cbe857db2ed2ce181fb20235a31aa894cf1d79048c9e988b074b7955"
+  },
+  "followup_raw.md": {
+    "size_bytes": 1696,
+    "sha256": "2abad5000afef6192e2925bded5ac469e8a053e127082e4f8cfed533513eb2ae"
+  },
+  "run_meta.json": {
+    "size_bytes": 1256,
+    "sha256": "aad94fbd20b4ef10a7ba624d25729e6c0cfc25f11939eb876a1d36d067bc16bb"
+  }
+}
